@@ -10,6 +10,17 @@ const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const NAME = /^[a-z0-9][a-z0-9-]{1,127}$/;
 const PHASES = ['build', 'preflight', 'public-preflight', 'save', 'load', 'push'] as const;
 type Phase = typeof PHASES[number];
+// Detached Sandbox commands return immediately, so their timeoutMs does not
+// bound the lifetime of the background process. Enforce the phase limit when
+// reconciling the exact recorded command instead of polling it indefinitely.
+const PHASE_LIMIT_MS: Record<Phase, number> = {
+  build: 20 * 60_000,
+  preflight: 15 * 60_000,
+  'public-preflight': 15 * 60_000,
+  save: 10 * 60_000,
+  load: 10 * 60_000,
+  push: 20 * 60_000,
+};
 type Store = { read: (key: string) => Promise<unknown>;
   claim: (key: string, value: unknown) => Promise<boolean> };
 type Identity = { sourceId: string; commit: string; workerId: string;
@@ -92,7 +103,7 @@ export async function startNativeStudioImageCommand(input: Identity & {
 export async function pollNativeStudioImageCommand(input: Identity,
   sdk: Pick<typeof Sandbox, 'get'> = Sandbox): Promise<{
     state: 'running' | 'succeeded' | 'pending-review';
-    exitCode?: number }>
+    exitCode?: number; reason?: 'command-timeout' }>
 {
   validate(input);
   const key = keys(input.phase);
@@ -114,7 +125,21 @@ export async function pollNativeStudioImageCommand(input: Identity,
   if (sandbox.status !== 'running' ||
       sandbox.currentSession().sessionId !== intent.sessionId)
     return { state: 'pending-review' };
-  if (command.exitCode === null) return { state: 'running' };
+  if (command.exitCode === null) {
+    const startedAt = command.startedAt;
+    if (!Number.isSafeInteger(startedAt) ||
+        startedAt < Date.UTC(2020, 0, 1) ||
+        startedAt > Date.now() + 30_000)
+      return { state: 'pending-review' };
+    if (Date.now() - startedAt >= PHASE_LIMIT_MS[input.phase]) {
+      // A detached command may already have disappeared while the provider
+      // still reports a null exit code. Its kill can fail in that case; the
+      // recorded command remains pending review and is never restarted.
+      try { await command.kill('SIGKILL'); } catch { /* stale command */ }
+      return { state: 'pending-review', reason: 'command-timeout' };
+    }
+    return { state: 'running' };
+  }
   if (command.exitCode === 0) return { state: 'succeeded', exitCode: 0 };
   return { state: 'pending-review', exitCode: command.exitCode };
 }

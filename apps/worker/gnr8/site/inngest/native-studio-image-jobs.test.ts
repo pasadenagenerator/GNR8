@@ -116,6 +116,13 @@ test('image build resumes exact transfer and records missing preflight before pu
   assert.deepEqual(await runNativeStudioImageBuild(request, pending.deps),
     { state: 'pending-review' });
   assert.equal(pending.calls.includes('enqueue'), false);
+  const timedOut = buildFixture();
+  timedOut.setEvidence({ ...base, attempt, transfer: null });
+  timedOut.deps.build = async () => ({ state: 'pending-review' as const,
+    reason: 'command-timeout' as const, transfer });
+  assert.deepEqual(await runNativeStudioImageBuild(request, timedOut.deps),
+    { state: 'pending-review', reason: 'command-timeout' });
+  assert.equal(timedOut.calls.includes('enqueue'), false);
 });
 
 test('image push verifies transfer before provider and prebuilt before deploy', async () => {

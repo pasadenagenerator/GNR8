@@ -65,7 +65,7 @@ type SourceVerified = { sourceId: string; commit: string;
   workerId: string; driveName: string; manifestSha256: string };
 type Receipt = { session: Session; receipt: NativeStudioImageArchiveReceipt };
 export type DetachedImageBuildResult =
-  | { state: 'running' | 'pending-review' }
+  | { state: 'running' | 'pending-review'; reason?: 'command-timeout' }
   | { state: 'complete'; transfer: NativeStudioImageDriveTransfer };
 
 type Sdk = { drive: Pick<typeof Drive, 'get' | 'getOrCreate'>;
@@ -355,7 +355,8 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
     const poll = await steps.pollCommand(commandIdentity(input, stored, 'save'),
       dependencies.sandbox);
     if (poll.state !== 'succeeded')
-      return { state: poll.state === 'running' ? 'running' : 'pending-review' };
+      return poll.state === 'running' ? { state: 'running' } :
+        { state: 'pending-review', ...(poll.reason ? { reason: poll.reason } : {}) };
     const verification: SourceVerified = { sourceId: input.sourceId,
       commit: input.commit, workerId: input.workerId,
       driveName: attempt.driveName,
@@ -380,7 +381,8 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
   const poll = await steps.pollCommand(commandIdentity(input, stored, phase),
     dependencies.sandbox);
   if (poll.state !== 'succeeded')
-    return { state: poll.state === 'running' ? 'running' : 'pending-review' };
+    return poll.state === 'running' ? { state: 'running' } :
+      { state: 'pending-review', ...(poll.reason ? { reason: poll.reason } : {}) };
   await steps.verifySource(builder, stored.manifestSha256);
   if (phase === 'build') {
     requireRemainingTime(builder, 42 * 60_000);

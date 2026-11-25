@@ -15,6 +15,8 @@ function fixture() {
   let sessionId = 'sess_123';
   let status = 'running';
   let exitCode: number | null = null;
+  let startedAt = Date.now();
+  let killFails = false;
   const store = { read: async (key: string) => records.get(key) ?? null,
     claim: async (key: string, value: unknown) => {
       events.push(`claim:${key}`);
@@ -29,7 +31,12 @@ function fixture() {
     },
     getCommand: async (id: string) => {
       events.push('get-command'); assert.equal(id, 'cmd_123');
-      return { exitCode };
+      return { exitCode, startedAt,
+        kill: async (signal: string) => {
+          events.push(`kill:${signal}`);
+          if (killFails) throw Error('command not found');
+          exitCode = 137;
+        } };
     },
   };
   const sandbox = { name: base.sandboxName,
@@ -43,7 +50,9 @@ function fixture() {
   return { events, records, sandbox, sdk, store,
     setSession: (value: string) => { sessionId = value; },
     setStatus: (value: string) => { status = value; },
-    setExit: (value: number | null) => { exitCode = value; } };
+    setExit: (value: number | null) => { exitCode = value; },
+    setStartedAt: (value: number) => { startedAt = value; },
+    setKillFails: (value: boolean) => { killFails = value; } };
 }
 
 test('claim precedes detached start; later polls never start another command', async () => {
@@ -86,6 +95,46 @@ test('stopped or replaced session is never resumed by the poller', async () => {
   assert.deepEqual(await pollNativeStudioImageCommand(input, f.sdk),
     { state: 'pending-review' });
   assert.equal(f.events.includes('get-command'), false);
+});
+
+test('expired detached command is killed once and never restarted', async () => {
+  const f = fixture();
+  const input = { ...base, store: f.store };
+  await startNativeStudioImageCommand({ ...input, sandbox: f.sandbox as any,
+    command: { cmd: 'docker', args: ['build', '.'],
+      timeoutMs: 20 * 60_000 } });
+  f.setStartedAt(Date.now() - 21 * 60_000);
+  assert.deepEqual(await pollNativeStudioImageCommand(input, f.sdk),
+    { state: 'pending-review', reason: 'command-timeout' });
+  assert.deepEqual(await pollNativeStudioImageCommand(input, f.sdk),
+    { state: 'pending-review', exitCode: 137 });
+  assert.equal(f.events.filter(event => event === 'kill:SIGKILL').length, 1);
+  assert.equal(f.events.filter(event => event === 'run').length, 1);
+});
+
+test('unverified command timestamp never triggers a kill', async () => {
+  const f = fixture();
+  const input = { ...base, store: f.store };
+  await startNativeStudioImageCommand({ ...input, sandbox: f.sandbox as any,
+    command: { cmd: 'docker', args: ['build', '.'],
+      timeoutMs: 20 * 60_000 } });
+  f.setStartedAt(Math.floor(Date.now() / 1000));
+  assert.deepEqual(await pollNativeStudioImageCommand(input, f.sdk),
+    { state: 'pending-review' });
+  assert.equal(f.events.some(event => event.startsWith('kill:')), false);
+});
+
+test('lost provider command still ends in review without a retry', async () => {
+  const f = fixture();
+  const input = { ...base, store: f.store };
+  await startNativeStudioImageCommand({ ...input, sandbox: f.sandbox as any,
+    command: { cmd: 'docker', args: ['build', '.'],
+      timeoutMs: 20 * 60_000 } });
+  f.setStartedAt(Date.now() - 21 * 60_000);
+  f.setKillFails(true);
+  assert.deepEqual(await pollNativeStudioImageCommand(input, f.sdk),
+    { state: 'pending-review', reason: 'command-timeout' });
+  assert.equal(f.events.filter(event => event === 'run').length, 1);
 });
 
 test('ambiguous start leaves a private intent and cannot retry', async () => {

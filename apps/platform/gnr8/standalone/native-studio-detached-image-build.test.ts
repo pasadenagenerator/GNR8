@@ -62,7 +62,11 @@ function fixture() {
       const cmdId = `cmd_${++nextCommand}`;
       exits.set(cmdId, null); return { cmdId };
     },
-    getCommand: async (cmdId: string) => ({ exitCode: exits.get(cmdId) ?? null }) };
+    getCommand: async (cmdId: string) => ({
+      exitCode: exits.get(cmdId) ?? null,
+      startedAt: Date.now(),
+      kill: async () => { exits.set(cmdId, 137); },
+    }) };
   const sandbox = { name: '', get status() { return running ? 'running' : 'stopped'; },
     sourceSnapshotId: input.buildSnapshotId, region: 'iad1',
     persistent: false, timeout: input.sandboxTimeoutMs,

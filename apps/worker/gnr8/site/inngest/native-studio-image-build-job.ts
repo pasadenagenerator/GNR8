@@ -9,7 +9,7 @@ export const NATIVE_STUDIO_IMAGE_BUILD_EVENT = 'gnr8/native-studio.image-build.r
 const MAX_ADVANCES = 50;
 const POLL_INTERVAL = '2m';
 type Progress = { state: 'running' | 'complete' | 'pending-review';
-  transfer?: any };
+  transfer?: any; reason?: 'command-timeout' };
 
 const defaults = {
   enabled: () => process.env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED === '1',
@@ -72,7 +72,8 @@ export async function runNativeStudioImageBuild(value: unknown,
     throw Error('native_studio_image_build_target_changed');
   if (refreshed.preflight) verifyBaseEvidence(request, refreshed);
   if (progress.state === 'pending-review')
-    return { state: 'pending-review' as const };
+    return { state: 'pending-review' as const,
+      ...(progress.reason ? { reason: progress.reason } : {}) };
   if (progress.state === 'running') {
     verifyImageAttempt(request, refreshed.attempt, accountId);
     if (refreshed.transfer)
