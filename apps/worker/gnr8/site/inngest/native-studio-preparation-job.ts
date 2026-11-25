@@ -63,8 +63,16 @@ export async function prepareNativeStudioSourceEvent(data:any,deps={
   return runDirectNativeStudioPreparation(data);},
 }){
  const {client,scope}=await deps.authorize(data);
- await deps.prerequisite(scope,client);
- return deps.prepare(data);
+ try { await deps.prerequisite(scope,client); }
+ catch(error){
+  if(error instanceof Error&&/^native_studio_[a-z0-9_]+$/.test(error.message))throw error;
+  throw Error('native_studio_access_prerequisite_failed');
+ }
+ try { return await deps.prepare(data); }
+ catch(error){
+  if(error instanceof Error&&/^native_studio_[a-z0-9_]+$/.test(error.message))throw error;
+  throw Error('native_studio_source_preparation_failed');
+ }
 }
 
 export const nativeStudioPreparationJob=inngest.createFunction({id:'native-studio-preparation-job',retries:1,

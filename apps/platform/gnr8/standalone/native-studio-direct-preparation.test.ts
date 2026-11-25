@@ -47,6 +47,13 @@ test('direct preparation exports a confirmed Astro selection and stores source w
  assert.equal(result.files,1);
  assert.deepEqual(f.calls,['actor','confirm','confirm','actor','persist','record']);
 });
+test('direct preparation identifies an asset read failure without revealing storage details',async()=>{
+ const f=fixture();
+ f.deps.planAssets=async()=>({entries:[{name:'asset',path:'/asset',sha256:'a'.repeat(64)}],
+  read:async()=>{throw Error('private storage response');}});
+ await assert.rejects(runDirectNativeStudioPreparation({scope,input:f.input,actor:id(6)},
+  f.deps as any),/^Error: native_studio_source_asset_read_failed$/);
+});
 test('changed confirmation and foreign ownership stop before a source receipt',async()=>{
  const stale=fixture();
  const original=stale.deps.export;

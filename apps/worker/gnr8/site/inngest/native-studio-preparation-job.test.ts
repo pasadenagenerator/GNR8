@@ -80,3 +80,18 @@ test('provider setup follows authorization and precedes source preparation', asy
   }), /revoked/);
   assert.deepEqual(calls, ['authorize']);
 });
+
+test('source event reports the failed phase without exposing provider details', async () => {
+  const privateError = 'provider response includes a private value';
+  const deps = {
+    authorize: async () => ({client: {}, scope}),
+    prerequisite: async () => { throw Error(privateError); },
+    prepare: async () => 'prepared',
+  };
+  await assert.rejects(prepareNativeStudioSourceEvent(request, deps),
+    /^Error: native_studio_access_prerequisite_failed$/);
+  deps.prerequisite = async () => {};
+  deps.prepare = async () => { throw Error(privateError); };
+  await assert.rejects(prepareNativeStudioSourceEvent(request, deps),
+    /^Error: native_studio_source_preparation_failed$/);
+});
