@@ -283,17 +283,25 @@ async function extract(input: NativeStudioDetachedSourceBuildInput,
     throw Error('native_studio_detached_source_output_changed');
   const artifactDir = await mkdtemp(join(tmpdir(), 'gnr8-native-build-artifact-'));
   try {
-    for (const file of listed) {
-      const body = await readBounded(sandbox, `${ROOT}/${file.path}`,
-        file.bytes);
-      if (body.length !== file.bytes || hash(body) !== file.sha256)
-        throw Error('native_studio_detached_source_output_changed');
-      const path = join(artifactDir, file.path);
-      await mkdir(dirname(path), { recursive: true });
-      const handle = await open(path, 'wx', 0o600);
-      try { await handle.writeFile(body); }
-      finally { await handle.close(); }
-    }
+    const workers = Array.from({ length: Math.min(4, listed.length) },
+      async (_, worker) => {
+        for (let index = worker; index < listed.length; index += 4) {
+          const file = listed[index];
+          const body = await readBounded(sandbox, `${ROOT}/${file.path}`,
+            file.bytes);
+          if (body.length !== file.bytes || hash(body) !== file.sha256)
+            throw Error('native_studio_detached_source_output_changed');
+          const path = join(artifactDir, file.path);
+          await mkdir(dirname(path), { recursive: true });
+          const handle = await open(path, 'wx', 0o600);
+          try { await handle.writeFile(body); }
+          finally { await handle.close(); }
+        }
+      });
+    // Wait for every writer before a failure can remove the temporary folder.
+    const settled = await Promise.allSettled(workers);
+    const failed = settled.find(result => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
     if (!completed) await claimExact(input.store, COMPLETE, proof);
     await sandbox.stop();
     return { state: 'complete', artifactDir, files: listed,
