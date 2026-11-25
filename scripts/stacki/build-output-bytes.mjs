@@ -19,6 +19,20 @@ const MAX_FILE = 64 * 1024 * 1024;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const fail = () => { throw Error('native_studio_build_output_bytes_unverified'); };
+async function mapFiles(files, action) {
+  const values = new Array(files.length);
+  const workers = Array.from({ length: Math.min(4, files.length) },
+    async (_, worker) => {
+      for (let index = worker; index < files.length; index += 4)
+        values[index] = await action(files[index]);
+    });
+  // A failed transfer must not remove its temporary directory while another
+  // file is still being written, or claim a receipt before writers finish.
+  const settled = await Promise.allSettled(workers);
+  const failed = settled.find(result => result.status === 'rejected');
+  if (failed) throw failed.reason;
+  return values;
+}
 
 function safePath(path) {
   return typeof path === 'string' && path.length <= 300 &&
@@ -89,7 +103,7 @@ async function verifiedReceipt(input) {
     commit: receipt.commit, workerId: receipt.workerId,
     scope: receipt.scope, site: receipt.site }, expected)) fail();
   const files = receiptFiles(receipt);
-  for (const file of receipt.files) {
+  await mapFiles(receipt.files, async file => {
     if (!Array.isArray(file.chunks) ||
         file.chunks.length !== Math.ceil(file.bytes / CHUNK)) fail();
     let size = 0;
@@ -106,7 +120,7 @@ async function verifiedReceipt(input) {
       digest.update(bytes);
     }
     if (size !== file.bytes || digest.digest('hex') !== file.sha256) fail();
-  }
+  });
   return { receipt, files };
 }
 
@@ -123,8 +137,7 @@ export async function recordNativeStudioBuildOutputBytes(input) {
   if (!same(await scanStudioBuildOutputs(root), files) ||
       (await readdir(root)).sort().join() !== 'dist,studio' ||
       (await readdir(join(root, 'studio'))).join() !== 'dist') fail();
-  const stored = [];
-  for (const file of files) {
+  const stored = await mapFiles(files, async file => {
     const body = await safeBytes(root, file);
     const chunks = [];
     for (let offset = 0; offset < body.length; offset += CHUNK) {
@@ -133,8 +146,8 @@ export async function recordNativeStudioBuildOutputBytes(input) {
       await input.store.putBytes(chunk.sha256, part);
       chunks.push(chunk);
     }
-    stored.push({ ...file, chunks });
-  }
+    return { ...file, chunks };
+  });
   const receipt = { ...expected,
     manifestSha256: hash(Buffer.from(JSON.stringify(files))), files: stored };
   const prior = await input.store.read(NATIVE_STUDIO_BUILD_OUTPUT_BYTES);
@@ -150,7 +163,7 @@ export async function restoreNativeStudioBuildOutputBytes(input) {
   const { receipt, files } = await verifiedReceipt(input);
   const root = await mkdtemp(join(tmpdir(), 'gnr8-build-output-'));
   try {
-    for (const file of receipt.files) {
+    await mapFiles(receipt.files, async file => {
       const path = join(root, file.path);
       await mkdir(dirname(path), { recursive: true, mode: 0o700 });
       const handle = await open(path, 'wx', 0o600);
@@ -158,7 +171,7 @@ export async function restoreNativeStudioBuildOutputBytes(input) {
         for (const part of file.chunks)
           await handle.writeFile(await input.store.getBytes(part.sha256));
       } finally { await handle.close(); }
-    }
+    });
     if (!same(await scanStudioBuildOutputs(root), files)) fail();
     return { artifactDir: root, files, receipt,
       cleanup: () => rm(root, { recursive: true, force: true }) };
