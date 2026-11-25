@@ -74,7 +74,8 @@ deps = defaults) {
     deps.store(input.client, input.scope, env), {
       scope: input.scope, site, sourceId: input.sourceId,
       commit: input.sourceCommit, workerId: input.workerId, buildSnapshotId,
-    }, { allowCreate: true, validateNewSnapshot: validateSnapshots });
+    }, { allowCreate: true, validateNewSnapshot: validateSnapshots,
+      buildNetworkPolicy: buildNetworkPolicy as { allow: string[] } });
   const prepared = { site, store, sourceId: input.sourceId,
     commit: input.sourceCommit, workerId: input.workerId };
     // Snapshot availability matters when creating a Sandbox. A live attempt

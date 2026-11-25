@@ -105,3 +105,34 @@ test('unavailable replacement snapshot cannot claim a recovery', async () => {
   }), /snapshot unavailable/);
   assert.equal(f.records.has('native-studio/image-recovery-v1.json'), false);
 });
+
+test('a stopped image build can resume for every site when its network allowlist expands', async () => {
+  const f = fixture();
+  await nativeStudioImageRecoveryStore(f.store, identity,
+    { allowCreate: true, sandbox: f.sandbox as any });
+  const nextAttempt = { ...oldAttempt, buildSnapshotId: identity.buildSnapshotId,
+    driveName: 'gnr8-img-33333333-aaaaaaaa-55555555-5555-4555-8555-555555555555' };
+  const nextName = 'gnr8-image-build-55555555-5555-4555-8555-555555555555';
+  f.records.set('native-studio/recovery-v1/image-drive-attempt-v2.json', nextAttempt);
+  f.records.set('native-studio/recovery-v1/image-build-session-v1.json',
+    { attempt: nextAttempt, sandboxName: nextName, sessionId: 'sess_new' });
+  f.records.set('native-studio/recovery-v1/image-build-command-started-v1.json',
+    { intent: { sourceId: identity.sourceId, commit: identity.commit,
+      workerId: identity.workerId, siteId: scope.siteId,
+      driveName: nextAttempt.driveName, sandboxName: nextName,
+      sessionId: 'sess_new', phase: 'build' }, cmdId: 'cmd_new' });
+  const policy = { allow: ['registry-1.docker.io', 'docker-images.example.com'] };
+  const sandbox = { get: async () => ({ name: nextName, status: 'stopped',
+    sourceSnapshotId: identity.buildSnapshotId,
+    currentSession: () => ({ sessionId: 'sess_new' }),
+    networkPolicy: { allow: ['registry-1.docker.io'] } }) };
+  const current = await nativeStudioImageRecoveryStore(f.store, identity,
+    { allowCreate: true, sandbox: sandbox as any, buildNetworkPolicy: policy });
+  assert.equal(await current.read('native-studio/image-drive-attempt-v2.json'), null);
+  await current.claim('native-studio/image-drive-attempt-v2.json',
+    { ...nextAttempt, driveName: 'gnr8-img-next' });
+  assert.equal(f.records.has('native-studio/recovery-v2/image-drive-attempt-v2.json'), true);
+  assert.deepEqual(await (await nativeStudioImageRecoveryStore(f.store, identity))
+    .read('native-studio/image-drive-attempt-v2.json'),
+    await current.read('native-studio/image-drive-attempt-v2.json'));
+});
