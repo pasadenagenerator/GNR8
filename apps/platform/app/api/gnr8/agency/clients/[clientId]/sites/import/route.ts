@@ -29,6 +29,7 @@ import { recordSingleSiteCaptureSpine, type SingleSiteCaptureSpineEvidenceRefInp
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+export const maxDuration = 800
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -705,6 +706,10 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       throw new Error('Import ownership changed after GitHub preflight.')
     }
 
+    console.info('[site-import] SCOPED_IMPORT_PIPELINE_STARTED', {
+      siteVersionId: preallocatedIdentity.siteVersionId,
+      multiPageEnabled: body.multiPageDiscovery != null,
+    })
     const imported = await runScopedImportPipeline({
       snapshot,
       sourceUrl: importUrl.toString(),
@@ -720,6 +725,10 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         siteVersionId: preallocatedIdentity.siteVersionId,
       },
       multiPageDiscovery: body.multiPageDiscovery,
+    })
+    console.info('[site-import] SCOPED_IMPORT_PIPELINE_COMPLETED', {
+      siteVersionId: imported.siteVersionId,
+      mode: imported.mode,
     })
 
     if (imported.siteId !== preallocatedIdentity.siteId || imported.siteVersionId !== preallocatedIdentity.siteVersionId) {

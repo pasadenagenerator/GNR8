@@ -1831,6 +1831,10 @@ async function acquireScopedMultiPageHtml(input: {
       return []
     }
   })
+  console.info('[scoped-import] MULTIPAGE_HTML_PAGES_FETCHED', {
+    candidateCount: candidates.length,
+    fetchedPageCount: fetchedAssetPages.length,
+  })
   const childAssetCapture = fetchedAssetPages.length > 0
     ? await captureAssetsForAdditionalHtmlPages({
         pages: fetchedAssetPages,
@@ -1846,6 +1850,10 @@ async function acquireScopedMultiPageHtml(input: {
         } : {}),
       })
     : null
+  console.info('[scoped-import] MULTIPAGE_CHILD_ASSETS_COMPLETED', {
+    fetchedAssetCount: childAssetCapture?.summary.fetchedAssetCount ?? 0,
+    failedRequiredAssetCount: childAssetCapture?.summary.failedRequiredAssetCount ?? 0,
+  })
   if (childAssetCapture) {
     input.snapshot.fetchManifest.push(...childAssetCapture.manifestEntries)
     const captureByBodyPath = new Map(childAssetCapture.pages.map((page) => [page.bodyPath, page]))
@@ -3846,6 +3854,9 @@ export async function runScopedImportPipeline(input: {
       assetsDirPath: importInput.assetsDirPath ?? undefined,
     },
   })
+  console.info('[scoped-import] CORE_IMPORT_COMPLETED', {
+    runtimeSiteVersionId: input.runtimeIdentity?.siteVersionId ?? null,
+  })
   const importManifest = deps.createImportManifest(importOutput)
   const pipelineResult = deps.runLinearMigrationPipeline(
     { importOutput, importManifest },
@@ -3868,6 +3879,10 @@ export async function runScopedImportPipeline(input: {
       quality: input.snapshot.sourceSelection.renderedDomQuality.quality,
     },
   })
+  console.info('[scoped-import] MULTIPAGE_DISCOVERY_STARTED', {
+    runtimeSiteVersionId: input.runtimeIdentity?.siteVersionId ?? null,
+    enabled: input.multiPageDiscovery != null,
+  })
   const multiPageDiscovery = await buildScopedMultiPageDiscovery({
     option: input.multiPageDiscovery,
     sourceUrl: input.sourceUrl,
@@ -3880,6 +3895,11 @@ export async function runScopedImportPipeline(input: {
           asset.httpStatus === 404 && Boolean(asset.resolvedUrl))
         .map((asset) => asset.resolvedUrl!),
     ],
+  })
+  console.info('[scoped-import] MULTIPAGE_DISCOVERY_COMPLETED', {
+    runtimeSiteVersionId: input.runtimeIdentity?.siteVersionId ?? null,
+    discoveredPageCount: multiPageDiscovery.summary.discoveredPageCount,
+    fetchedPageCount: multiPageDiscovery.summary.htmlAcquisition?.fetchedPageCount ?? 0,
   })
   let importProvenanceSummary = await buildImportProvenanceSummary({
     sourceUrl: input.sourceUrl,
