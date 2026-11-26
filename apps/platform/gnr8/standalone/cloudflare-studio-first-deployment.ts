@@ -97,14 +97,20 @@ export async function inspectCloudflareStudioFirstDeployment(
       throw Error('native_studio_first_deployment_source_conflict');
   }
   const version = await read(`/workers/scripts/${worker}/versions/${versionId}`);
-  if (!object(version) || version.id !== versionId || !object(version.resources) ||
-      !object(version.resources.script_runtime) ||
-      !object(version.resources.script_runtime.exports) ||
-      !object(version.resources.script_runtime.exports.PreviewContainer) ||
-      version.resources.script_runtime.exports.PreviewContainer.type !== 'durable-object' ||
-      version.resources.script_runtime.exports.PreviewContainer.storage !== 'sqlite' ||
-      version.resources.script_runtime.exports.PreviewContainer.state === 'deleted')
-    throw Error('native_studio_first_deployment_export_conflict');
+  if (!object(version) || version.id !== versionId || !object(version.resources))
+    throw Error('native_studio_first_deployment_version_shape_conflict');
+  if (!object(version.resources.script_runtime))
+    throw Error('native_studio_first_deployment_runtime_missing');
+  if (!object(version.resources.script_runtime.exports))
+    throw Error('native_studio_first_deployment_exports_missing');
+  if (!object(version.resources.script_runtime.exports.PreviewContainer))
+    throw Error('native_studio_first_deployment_preview_export_missing');
+  if (version.resources.script_runtime.exports.PreviewContainer.type !== 'durable-object')
+    throw Error('native_studio_first_deployment_export_type_conflict');
+  if (version.resources.script_runtime.exports.PreviewContainer.storage !== 'sqlite')
+    throw Error('native_studio_first_deployment_export_storage_conflict');
+  if (version.resources.script_runtime.exports.PreviewContainer.state === 'deleted')
+    throw Error('native_studio_first_deployment_export_deleted');
   // Cloudflare documents both fields as optional in a version read. Their
   // absence does not contradict the tagged, active Durable Object export.
   if (version.resources.script_runtime.migration_tag !== undefined &&

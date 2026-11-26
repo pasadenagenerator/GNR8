@@ -107,6 +107,16 @@ test('rejects explicitly conflicting migration and handler metadata', async () =
     accountId, workerId, domain, credential, f.transport), /handler_conflict/);
 });
 
+test('identifies the exact conflicting export property without exposing metadata', async () => {
+  const f = fixture();
+  const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
+    resources: { script_runtime: { exports: { PreviewContainer: {
+      type: string; storage: string } } } } };
+  version.resources.script_runtime.exports.PreviewContainer.storage = 'legacy-kv';
+  await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport), /export_storage_conflict/);
+});
+
 test('corroborates the exact first deploy tag on the actively serving version', async () => {
   const f = fixture();
   assert.deepEqual(await inspectCloudflareStudioFirstDeployment(scope,
