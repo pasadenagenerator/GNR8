@@ -87,7 +87,7 @@ export async function inspectCloudflareStudioFirstDeployment(
       !Array.isArray(latest.versions) || latest.versions.length !== 1 ||
       !object(latest.versions[0]) || latest.versions[0].percentage !== 100 ||
       !UUID.test(latest.versions[0].version_id as string))
-    throw Error('native_studio_first_deployment_version_conflict');
+    throw Error('native_studio_first_deployment_traffic_conflict');
   const versionId = latest.versions[0].version_id as string;
   if (expectedTag) {
     const taggedVersion = await read(`/workers/workers/${worker}/versions/${versionId}`);
@@ -103,12 +103,19 @@ export async function inspectCloudflareStudioFirstDeployment(
       !object(version.resources.script_runtime.exports.PreviewContainer) ||
       version.resources.script_runtime.exports.PreviewContainer.type !== 'durable-object' ||
       version.resources.script_runtime.exports.PreviewContainer.storage !== 'sqlite' ||
-      version.resources.script_runtime.exports.PreviewContainer.state === 'deleted' ||
-      version.resources.script_runtime.migration_tag !== 'v1' ||
-      !object(version.resources.script) ||
-      !Array.isArray(version.resources.script.handlers) ||
-      !version.resources.script.handlers.includes('fetch'))
-    throw Error('native_studio_first_deployment_version_conflict');
+      version.resources.script_runtime.exports.PreviewContainer.state === 'deleted')
+    throw Error('native_studio_first_deployment_export_conflict');
+  // Cloudflare documents both fields as optional in a version read. Their
+  // absence does not contradict the tagged, active Durable Object export.
+  if (version.resources.script_runtime.migration_tag !== undefined &&
+      version.resources.script_runtime.migration_tag !== 'v1')
+    throw Error('native_studio_first_deployment_migration_conflict');
+  if (version.resources.script !== undefined &&
+      (!object(version.resources.script) ||
+        version.resources.script.handlers !== undefined &&
+        (!Array.isArray(version.resources.script.handlers) ||
+          !version.resources.script.handlers.includes('fetch'))))
+    throw Error('native_studio_first_deployment_handler_conflict');
   const container = version.resources.script_runtime.exports.PreviewContainer.container;
   if (typeof container !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(container))
     throw Error('native_studio_first_deployment_container_conflict');

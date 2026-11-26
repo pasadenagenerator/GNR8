@@ -81,6 +81,32 @@ test('reports a safe transport category without exposing a request', async () =>
   /native_studio_first_deployment_transport_failed/);
 });
 
+test('accepts optional version metadata absent from Cloudflare readback', async () => {
+  const f = fixture();
+  const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
+    resources: { script?: { handlers: string[] }; script_runtime: {
+      migration_tag?: string } } };
+  delete version.resources.script;
+  delete version.resources.script_runtime.migration_tag;
+  assert.equal((await inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag,
+    expectedRepository, true)).state, 'verified-source-control-plane');
+});
+
+test('rejects explicitly conflicting migration and handler metadata', async () => {
+  const f = fixture();
+  const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
+    resources: { script: { handlers: string[] }; script_runtime: {
+      migration_tag: string } } };
+  version.resources.script_runtime.migration_tag = 'foreign';
+  await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport), /migration_conflict/);
+  version.resources.script_runtime.migration_tag = 'v1';
+  version.resources.script.handlers = ['scheduled'];
+  await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport), /handler_conflict/);
+});
+
 test('corroborates the exact first deploy tag on the actively serving version', async () => {
   const f = fixture();
   assert.deepEqual(await inspectCloudflareStudioFirstDeployment(scope,
@@ -166,7 +192,7 @@ test('foreign Worker, wrong bindings and split traffic fail closed', async () =>
     versions: [{ version_id: versionId, percentage: 50 },
       { version_id: '66666666-6666-4666-8666-666666666666', percentage: 50 }] }] };
   await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
-    accountId, workerId, domain, credential, f.transport), /version_conflict/);
+    accountId, workerId, domain, credential, f.transport), /traffic_conflict/);
   f.result[`/workers/scripts/${worker}/deployments`] = { deployments: [{ id: deploymentId,
     versions: [{ version_id: versionId, percentage: 100 }] }] };
   const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
