@@ -23,6 +23,8 @@ import { deterministicId } from '@/gnr8/runtime/deterministic'
 import { RENDERER_COMPATIBILITY_VERSION } from '@/gnr8/runtime/types'
 import { getArtifactById, preallocateSiteVersionIdentity } from '@/gnr8/runtime/runtime-store'
 import { importPublicSinglePageUrlToSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
+import { UrlImportSeedCheckpoint } from '@/gnr8/site/url-import-seed-checkpoint'
+import { ASTRO_CANDIDATE_OBJECT_BUCKET_ENV } from '@/gnr8/output-adapters/astro-production-candidate-object-store'
 import { getSuperadminPool } from '@/src/superadmin/db'
 import { recordSingleSiteCaptureSpine, type SingleSiteCaptureSpineEvidenceRefInput } from '@/gnr8/single-site/single-site-capture-spine-adapter'
 
@@ -517,10 +519,11 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
 
     if(body.importAttemptId!==undefined&&!normalizeUuid(body.importAttemptId))
       return NextResponse.json({ok:false,error:'Invalid import attempt ID.'},{status:400})
+    const importAttemptId = body.importAttemptId ?? crypto.randomUUID()
     const runtimeIdentity = await resolveScopedImportRuntimeIdentity({
       sourceUrl: importUrl.toString(), clientId, agencyId: actionContext.agencyId,
       captureRevision: 'github-complete-capture-v1',
-      importAttemptId:body.importAttemptId??crypto.randomUUID(),
+      importAttemptId,
     })
     const proposedOwnershipSiteId = newScopedImportOwnershipSiteId({
       sourceUrl: importUrl.toString(), clientId, agencyId: actionContext.agencyId,
@@ -601,12 +604,32 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       reasonCode: preallocatedIdentity.reused ? 'preallocated_identity_exists' : 'preallocated_identity_created',
     })
 
-    const snapshot = await importPublicSinglePageUrlToSnapshot({
+    const checkpointBucket = process.env[ASTRO_CANDIDATE_OBJECT_BUCKET_ENV]
+    const checkpointClient = checkpointBucket ? getSupabaseServiceRoleClient() : null
+    if (!checkpointBucket || !checkpointClient) diagnostics.push('SITE_IMPORT_SEED_CHECKPOINT_UNCONFIGURED')
+    const checkpoint = checkpointClient && checkpointBucket
+      ? new UrlImportSeedCheckpoint(checkpointClient, checkpointBucket, {
+          agencyId: actionContext.agencyId, clientId,
+          siteVersionId: preallocatedIdentity.siteVersionId, importAttemptId,
+        }) : null
+    const restoredSnapshot = checkpoint ? await checkpoint.load(importUrl.toString()) : null
+    const snapshot = restoredSnapshot ?? await importPublicSinglePageUrlToSnapshot({
       sourceUrl: importUrl.toString(),
       requestId: `client-site-import-${Date.now()}`,
       siteId: preallocatedIdentity.siteId,
       siteVersionId: preallocatedIdentity.siteVersionId,
     })
+    if (restoredSnapshot) {
+      diagnostics.push('SITE_IMPORT_SEED_CHECKPOINT_RESTORED')
+    } else if (checkpoint && snapshot.importIntake?.ok) {
+      try {
+        await checkpoint.save(snapshot)
+        diagnostics.push('SITE_IMPORT_SEED_CHECKPOINT_SAVED')
+      } catch {
+        // A cache failure must not turn a valid source capture into a failed import.
+        diagnostics.push('SITE_IMPORT_SEED_CHECKPOINT_UNAVAILABLE')
+      }
+    }
     const rawHtml = fs.readFileSync(snapshot.entryHtmlPathAbs, 'utf8')
     const documentTitle = extractTitleFromHtmlDocument(rawHtml)
     const siteNameResolution = resolveImportedSiteName({
