@@ -204,8 +204,16 @@ export async function advanceNativeStudioDetachedPublicDeploy(input: Input,
     let command: { exitCode: number | null };
     try { command = await sandbox.currentSession().getCommand(started.cmdId); }
     catch { return observe(input, credential, tag); }
-    if (command.exitCode === null)
+    if (command.exitCode === null) {
+      // The detached command can remain marked running after Wrangler has
+      // deployed. The exact tagged Cloudflare readback is authoritative.
+      const result = await observe(input, credential, tag);
+      if (result.state === 'first-open-required') {
+        try { await sandbox.stop(); } catch { /* Exact readback is authoritative. */ }
+        return result;
+      }
       return { state: 'running', commit: input.commit };
+    }
     const result = await observe(input, credential, tag);
     try { await sandbox.stop(); } catch { /* Readback controls reconciliation. */ }
     return result;

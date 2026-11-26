@@ -25,6 +25,7 @@ test('stages verified public package then deploys once and observes tag', async 
       '44444444-4444-4444-8444-444444444444', sessionId: 'sess_build' });
   const calls: string[] = [];
   let exit: number | null = null;
+  let observed = false;
   const store = { read: async (key: string) => records.get(key) ?? null,
     claim: async (key: string, value: unknown) => {
       if (records.has(key)) return false;
@@ -62,8 +63,9 @@ test('stages verified public package then deploys once and observes tag', async 
     prepareIntent: async () => { records.set('native-studio/first-public-deploy-intent-v1.json',
       expectedAttempt); return { state: 'prepared', commit,
       publicWorkerId, studioTag }; },
-    inspect: async () => ({ state: 'observed-control-plane',
-      workerId: publicWorkerId }),
+    inspect: async () => observed
+      ? { state: 'observed-control-plane', workerId: publicWorkerId }
+      : { state: 'pending' },
   };
   assert.equal((await advanceNativeStudioDetachedPublicDeploy(input as any,
     sdk as any, steps as any)).state, 'running');
@@ -71,7 +73,7 @@ test('stages verified public package then deploys once and observes tag', async 
     sdk as any, steps as any)).state, 'running');
   assert.equal((await advanceNativeStudioDetachedPublicDeploy(input as any,
     sdk as any, steps as any)).state, 'running');
-  exit = 0;
+  observed = true;
   assert.deepEqual(await advanceNativeStudioDetachedPublicDeploy(input as any,
     sdk as any, steps as any), { state: 'first-open-required', commit,
     observation: 'observed-control-plane' });
