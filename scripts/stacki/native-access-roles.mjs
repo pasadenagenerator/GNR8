@@ -1,4 +1,4 @@
-/** The narrow GNR8 bootstrap shape accepted by unchanged Stacki 1.4.13.
+/** The narrow GNR8 bootstrap shape accepted by unchanged Stacki 1.4.20.
  * Callers must verify each identity against current agency membership and
  * the selected provider before passing it here. Format checks are not proof
  * of account ownership.

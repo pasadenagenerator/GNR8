@@ -7,7 +7,7 @@ import type { NativeStudioImageArchiveReceipt } from './native-studio-image-driv
 const ROOT = '/vercel/sandbox/gnr8-image-source';
 const MANIFEST = '/vercel/sandbox/gnr8-image-source-manifest.json';
 const ARCHIVE = '/gnr8-image/image.tar';
-// Stacki 1.4.13 contributes 2,873 files. The largest retained native site
+// Stacki 1.4.20 contributes 2,950 files. The largest retained native site
 // already has 4,748 tracked files before its next release and Lumos addition.
 const MAX_FILES = 8000;
 const MAX_TOTAL = 512 * 1024 * 1024;

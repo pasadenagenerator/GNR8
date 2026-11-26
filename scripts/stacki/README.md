@@ -6,9 +6,17 @@ accepted these exact native controls. No generated EditorHeader patch is used.
 
 ## Pinned release and new projects
 
-`release-pin.mjs` pins Stacki 1.4.13 and its verified SHA-256. The downloader checks
+`release-pin.mjs` pins Stacki 1.4.20 and its verified SHA-256. The downloader checks
 bounded GitHub-to-release-assets redirects and verifies the entire payload before
 caching. There are no requests on module import.
+
+Existing 1.4.13 sites can be upgraded in a **clean, disposable checkout** with
+`node scripts/stacki/upgrade-native-studio.mjs SITE_CHECKOUT OLD_RELEASE_JSON NEW_RELEASE_JSON`.
+Both original release bundles must match their pinned SHA-256 hashes. The upgrader
+checks every old native file before writing, replaces only upstream `studio/`
+files, and preserves the site's Astro content, `.stacki/` data and GNR8 Worker
+configuration. It does not build, commit, push or deploy. Review the resulting
+Git diff and run the site's native build before any hosted rollout.
 
 ```sh
 node scripts/stacki/prepare-native-studio.mjs PROJECT RELEASE_JSON SITE_JSON
@@ -238,7 +246,7 @@ native direct hosting success alone is not proof of that endpoint's Git identity
 ## Validation
 
 ```sh
-STACKI_RELEASE_FILE=/path/to/stacki-studio-1.4.13.json \
+STACKI_RELEASE_FILE=/path/to/stacki-studio-1.4.20.json \
 LUMOS_SOURCE_DIRECTORY=/path/to/lumos-for-astro \
 NODE_OPTIONS=--conditions=react-server TSX_TSCONFIG_PATH=apps/platform/tsconfig.json \
 node --import tsx --test scripts/stacki/*.test.mjs
