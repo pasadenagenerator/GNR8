@@ -54,10 +54,15 @@ export async function inspectCloudflareStudioFirstDeployment(
   const bucket = `gnr8-${scope.siteId}-drafts`;
   const root = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
   async function read(path: string, allowMissing = false): Promise<unknown> {
-    const response = await transport(`${root}${path}`, {
-      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30_000),
-      headers: { authorization: `Bearer ${credential}`, accept: 'application/json' },
-    });
+    let response: Response;
+    try {
+      response = await transport(`${root}${path}`, {
+        method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30_000),
+        headers: { authorization: `Bearer ${credential}`, accept: 'application/json' },
+      });
+    } catch {
+      throw Error('native_studio_first_deployment_transport_failed');
+    }
     if (allowMissing && response.status === 404) return null;
     if (!response.ok) throw Error('native_studio_first_deployment_provider_unavailable');
     let data: unknown;
@@ -180,10 +185,12 @@ export async function inspectBoundCloudflareStudioFirstDeployment(
     .every(value => typeof value === 'string' && UUID.test(value)))
     throw Error('native_studio_first_deployment_scope_unverified');
   const [site, repository] = await Promise.all([
-    client.from('sites').select('domain').eq('id', scope.siteId)
-      .eq('agency_id', scope.agencyId).eq('org_id', scope.clientId).maybeSingle(),
-    new SiteGitHubRepositoryBinding(client).readForPublication(scope),
-  ]);
+      client.from('sites').select('domain').eq('id', scope.siteId)
+        .eq('agency_id', scope.agencyId).eq('org_id', scope.clientId).maybeSingle(),
+      new SiteGitHubRepositoryBinding(client).readForPublication(scope),
+    ]).catch(() => {
+    throw Error('native_studio_first_deployment_scope_unverified');
+  });
   if (site.error || !site.data || typeof site.data.domain !== 'string' || !repository)
     throw Error('native_studio_first_deployment_scope_unverified');
   let expectedAccess: AccessBinding | undefined;

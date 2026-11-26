@@ -74,6 +74,13 @@ test('reads active Worker version bindings and Container app without writes', as
   assert(!f.calls.includes(`/workers/scripts/${worker}/settings`));
 });
 
+test('reports a safe transport category without exposing a request', async () => {
+  const failed = (async () => { throw Error('network detail'); }) as typeof fetch;
+  await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, failed),
+  /native_studio_first_deployment_transport_failed/);
+});
+
 test('corroborates the exact first deploy tag on the actively serving version', async () => {
   const f = fixture();
   assert.deepEqual(await inspectCloudflareStudioFirstDeployment(scope,
