@@ -220,11 +220,15 @@ configuration. Preserve the original commit/manifest as migration provenance.
   an existing Workers Builds trigger.
 - Native GitHub authentication remains authoritative. Only configure launch
   bindings after these requirements pass; missing bindings fail closed.
-- To grant one GNR8 superadmin access to every current and future native Studio,
-  set `GNR8_NATIVE_STUDIO_GLOBAL_SUPERADMIN_EMAIL` to that person's confirmed
-  Supabase email. The same address must already be in `SUPERADMIN_EMAILS`.
-  The normal Access policy and `.stacki/roles.json` reconciliation then add or
-  remove that exact identity; existing agency owner/admin access remains.
+- To give an existing GNR8 superadmin a second Cloudflare Access login for all
+  current and future native Studios, set
+  `GNR8_NATIVE_STUDIO_GLOBAL_SUPERADMIN_ACCOUNT_EMAIL` to the confirmed Supabase
+  account email already in `SUPERADMIN_EMAILS`, and
+  `GNR8_NATIVE_STUDIO_GLOBAL_SUPERADMIN_EMAIL` to the additional Access email.
+  The latter must be independently verified by Cloudflare Access. Both map to
+  the same GNR8 user; no second Supabase user is created. The normal Access
+  policy and `.stacki/roles.json` reconciliation add or remove that exact
+  Access identity; existing agency owner/admin access remains.
 
 All provider writes, credential setup and exact-host migrations need the task's
 external rollout authorization. Do not present an offline receipt as hosting proof.

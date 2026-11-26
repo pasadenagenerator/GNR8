@@ -22,7 +22,8 @@ function fixture(options: {
   users?: Record<string, Record<string, unknown>>;
   site?: string | null;
   error?: boolean;
-  globalSuperadmin?: { user_id: string; email: string } | null;
+  globalSuperadmin?: { user_id: string; account_email: string;
+    access_email: string } | null;
 } = {}) {
   const reads: string[] = [];
   const members = options.members ?? [member(ownerId, 'owner'), member(adminId, 'admin'),
@@ -61,13 +62,15 @@ test('returns only current owner/admin Access candidates from confirmed auth ema
   assert.deepEqual(f.reads.sort(), [ownerId, adminId].sort());
 });
 
-test('adds the verified global superadmin to the same Access and Stacki candidate list', async () => {
+test('links one Access email to a verified existing GNR8 superadmin account', async () => {
   const globalId = '77777777-7777-4777-8777-777777777777';
-  const identity = { user_id: globalId, email: 'info@pasadenagenerator.com' };
+  const identity = { user_id: globalId,
+    account_email: 'grega.zigon@pasadenagenerator.com',
+    access_email: 'info@pasadenagenerator.com' };
   const f = fixture({ globalSuperadmin: identity,
     users: { [ownerId]: { id: ownerId, email: 'owner@example.com',
       email_confirmed_at: '2026-11-20T00:00:00Z' },
-      [globalId]: { id: globalId, email: identity.email,
+      [globalId]: { id: globalId, email: identity.account_email,
         email_confirmed_at: '2026-11-20T00:00:00Z' } },
     members: [member(ownerId, 'owner')] });
   assert.deepEqual(await readCurrentNativeStudioAccessCandidates(scope, f.client, f.deps), [
@@ -77,16 +80,19 @@ test('adds the verified global superadmin to the same Access and Stacki candidat
   assert.deepEqual(f.reads.sort(), [ownerId, globalId].sort());
 });
 
-test('does not duplicate a superadmin who already administers the agency', async () => {
+test('retains an agency email and adds the alias when the account is also an owner', async () => {
   const f = fixture({ globalSuperadmin: { user_id: ownerId,
-    email: 'owner@example.com' } });
-  assert.equal((await readCurrentNativeStudioAccessCandidates(scope, f.client, f.deps))
-    .filter(candidate => candidate.userId === ownerId).length, 1);
+    account_email: 'owner@example.com',
+    access_email: 'info@pasadenagenerator.com' } });
+  assert.deepEqual((await readCurrentNativeStudioAccessCandidates(scope, f.client, f.deps))
+    .filter(candidate => candidate.userId === ownerId).map(candidate => candidate.principal),
+  ['access:info@pasadenagenerator.com', 'access:owner@example.com']);
 });
 
-test('rejects a global identity whose current auth email differs', async () => {
+test('rejects an alias mapping whose current GNR8 account email differs', async () => {
   const f = fixture({ globalSuperadmin: { user_id: ownerId,
-    email: 'info@pasadenagenerator.com' } });
+    account_email: 'grega.zigon@pasadenagenerator.com',
+    access_email: 'info@pasadenagenerator.com' } });
   await assert.rejects(readCurrentNativeStudioAccessCandidates(scope, f.client, f.deps),
     /native_studio_access_global_superadmin_unverified/);
 });

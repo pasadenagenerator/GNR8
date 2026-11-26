@@ -15,23 +15,30 @@ export type NativeStudioAccessCandidate = {
 
 type Dependencies = {
   listMembers: (input: { agencyId: string }) => Promise<AgencyMemberRow[]>;
-  findGlobalSuperadmin: () => Promise<{ user_id: string; email: string } | null>;
+  findGlobalSuperadmin: () => Promise<{
+    user_id: string; account_email: string; access_email: string;
+  } | null>;
   now: () => number;
 };
 
 async function findGlobalSuperadmin() {
-  const email = (process.env.GNR8_NATIVE_STUDIO_GLOBAL_SUPERADMIN_EMAIL ?? '')
+  const accessEmail = (process.env.GNR8_NATIVE_STUDIO_GLOBAL_SUPERADMIN_EMAIL ?? '')
     .trim().toLowerCase();
-  if (!email) return null;
-  if (!EMAIL.test(email) || !(process.env.SUPERADMIN_EMAILS ?? '').split(',')
-    .some(value => value.trim().toLowerCase() === email))
+  if (!accessEmail) return null;
+  const accountEmail = (process.env.GNR8_NATIVE_STUDIO_GLOBAL_SUPERADMIN_ACCOUNT_EMAIL ?? '')
+    .trim().toLowerCase();
+  if (!EMAIL.test(accessEmail) || !EMAIL.test(accountEmail) ||
+      accessEmail === accountEmail ||
+      !(process.env.SUPERADMIN_EMAILS ?? '').split(',')
+        .some(value => value.trim().toLowerCase() === accountEmail))
     throw Error('native_studio_access_global_superadmin_invalid');
   const result = await getSuperadminPool().query<{ user_id: string; email: string }>(
     `select id::text as user_id, lower(email) as email from auth.users
-     where lower(email) = $1::text limit 2`, [email]);
-  if (result.rows.length !== 1 || result.rows[0].email !== email)
+     where lower(email) = any($1::text[]) limit 3`, [[accountEmail, accessEmail]]);
+  if (result.rows.length !== 1 || result.rows[0].email !== accountEmail)
     throw Error('native_studio_access_global_superadmin_unverified');
-  return result.rows[0];
+  return { user_id: result.rows[0].user_id,
+    account_email: accountEmail, access_email: accessEmail };
 }
 
 const defaults: Dependencies = { listMembers: listAgencyMembers,
@@ -65,11 +72,9 @@ export async function readCurrentNativeStudioAccessCandidates(
   if (!eligible.length) throw Error('native_studio_access_admin_missing');
   const globalSuperadmin = await deps.findGlobalSuperadmin();
   if (globalSuperadmin && (!UUID.test(globalSuperadmin.user_id) ||
-      !EMAIL.test(globalSuperadmin.email)))
+      !EMAIL.test(globalSuperadmin.account_email) ||
+      !EMAIL.test(globalSuperadmin.access_email)))
     throw Error('native_studio_access_global_superadmin_unverified');
-  if (globalSuperadmin && !eligible.some(member =>
-      member.user_id === globalSuperadmin.user_id))
-    eligible.push({ user_id: globalSuperadmin.user_id, role: 'admin' } as AgencyMemberRow);
   const seenUsers = new Set<string>();
   const seenEmails = new Set<string>();
   const candidates: NativeStudioAccessCandidate[] = [];
@@ -89,9 +94,6 @@ export async function readCurrentNativeStudioAccessCandidates(
     const pendingEmailChange = String((user as unknown as Record<string, unknown>)
       .email_change ?? '').trim();
     const email = String(user.email ?? '').trim().toLowerCase();
-    if (globalSuperadmin?.user_id === member.user_id &&
-        email !== globalSuperadmin.email)
-      throw Error('native_studio_access_global_superadmin_unverified');
     if (user.banned_until && !Number.isFinite(bannedUntil))
       throw Error('native_studio_access_identity_unverified');
     // A known ineligible member must be removed from the effective policy.
@@ -105,6 +107,28 @@ export async function readCurrentNativeStudioAccessCandidates(
     seenEmails.add(email);
     candidates.push({ userId: member.user_id, principal: `access:${email}`,
       role: member.role as 'owner' | 'admin' });
+  }
+
+  if (globalSuperadmin) {
+    const result = await client.auth.admin.getUserById(globalSuperadmin.user_id);
+    const user = result.data?.user;
+    if (result.error || !user || user.id !== globalSuperadmin.user_id ||
+        String(user.email ?? '').trim().toLowerCase() !==
+          globalSuperadmin.account_email)
+      throw Error('native_studio_access_global_superadmin_unverified');
+    const confirmedAt = Date.parse(user.email_confirmed_at ?? '');
+    const bannedUntil = user.banned_until ? Date.parse(user.banned_until) : 0;
+    const pendingEmailChange = String((user as unknown as Record<string, unknown>)
+      .email_change ?? '').trim();
+    if (user.banned_until && !Number.isFinite(bannedUntil))
+      throw Error('native_studio_access_global_superadmin_unverified');
+    if (Number.isFinite(confirmedAt) && confirmedAt <= now &&
+        (!user.banned_until || bannedUntil <= now) && !pendingEmailChange) {
+      if (seenEmails.has(globalSuperadmin.access_email))
+        throw Error('native_studio_access_identity_conflict');
+      candidates.push({ userId: globalSuperadmin.user_id,
+        principal: `access:${globalSuperadmin.access_email}`, role: 'admin' });
+    }
   }
 
   if (!candidates.length) throw Error('native_studio_access_admin_missing');
