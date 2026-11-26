@@ -12,6 +12,7 @@ import { NATIVE_STUDIO_RESOURCE_RECEIPT,
 import { advanceNativeStudioDetachedPublicDeploy } from './native-studio-detached-public-deploy';
 import { prepareStoredNativeStudioPublicDeployIntent } from './native-studio-stored-public-intent';
 import { SupabasePublicationStore } from './publication-store';
+import { nativeStudioImageRecoveryStore } from './native-studio-image-recovery';
 import type { NativeStudioScope } from './native-studio-binding-store';
 
 type Environment = Record<string, string | undefined>;
@@ -53,7 +54,12 @@ deps = defaults) {
       sandboxTimeoutMs < 30 * 60_000 || sandboxTimeoutMs > 90 * 60_000)
     throw Error('native_studio_public_detached_not_configured');
   const site = await deps.site(input.scope, input.client, env);
-  const store = deps.store(input.client, input.scope, env);
+  const store = await nativeStudioImageRecoveryStore(
+    deps.store(input.client, input.scope, env), {
+      scope: input.scope, site, sourceId: input.sourceId,
+      commit: input.sourceCommit, workerId: input.workerId,
+      buildSnapshotId: env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_SNAPSHOT ?? '',
+    });
   const reserved = await store.read<NativeStudioResourceReceipt>(NATIVE_STUDIO_RESOURCE_RECEIPT);
   const publicWorkerId = reserved?.workers?.publicSite?.id;
   if (!HEX32.test(publicWorkerId ?? '') ||

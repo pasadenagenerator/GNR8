@@ -8,6 +8,7 @@ import { NATIVE_STUDIO_RESOURCE_RECEIPT,
 import { configuredNativeStudioDeploymentCredentials } from './native-studio-configured-deployment-credentials';
 import { issueConfiguredNativeStudioGitHubToken } from './github-native-studio-token';
 import { recordNativeStudioFirstOpen } from './native-studio-first-open';
+import { nativeStudioImageRecoveryStore } from './native-studio-image-recovery';
 import { assertNativeStudioGitHubTokenCompatible } from './native-studio-upstream-github-compatibility';
 import type { NativeStudioScope } from './native-studio-binding-store';
 import { SupabasePublicationStore } from './publication-store';
@@ -74,15 +75,20 @@ export async function recordConfiguredNativeStudioFirstOpen(
         studioOrigin: site.studioOrigin, accountId: site.accountId }) ||
       !Array.isArray(built.files) || built.files.length === 0)
     throw Error('native_studio_configured_first_open_evidence_unverified');
+  const recoveredStore = await nativeStudioImageRecoveryStore(store, {
+    scope, site, sourceId: built.sourceId, commit: built.commit,
+    workerId: studioWorkerId!, buildSnapshotId:
+      env.GNR8_NATIVE_STUDIO_IMAGE_BUILD_SNAPSHOT ?? '',
+  });
   const { cloudflareCredential, secrets } = await deps.credentials(scope,
-    store, site.accountId, env);
+    recoveredStore, site.accountId, env);
   const { identity, tag } = firstStudioDeployIdentity({ scope,
     accountId: site.accountId, workerId: studioWorkerId,
     sourceId: built.sourceId, site, token: cloudflareCredential,
     secrets, commit: built.commit });
   const [intent, attempt] = await Promise.all([
-    store.read<{ identity: string; commit: string }>(INTENT),
-    store.read<{ identity: string; commit: string }>(ATTEMPT),
+    recoveredStore.read<{ identity: string; commit: string }>(INTENT),
+    recoveredStore.read<{ identity: string; commit: string }>(ATTEMPT),
   ]);
   if (intent?.identity !== identity || intent.commit !== built.commit ||
       attempt?.identity !== identity || attempt.commit !== built.commit)
@@ -94,7 +100,7 @@ export async function recordConfiguredNativeStudioFirstOpen(
     domain, repository: site.repository }),
   commit: built.commit, publicWorkerId };
   const [publicIntent, publicAttempt] = await Promise.all([
-    store.read(PUBLIC_INTENT), store.read(PUBLIC_ATTEMPT),
+    recoveredStore.read(PUBLIC_INTENT), recoveredStore.read(PUBLIC_ATTEMPT),
   ]);
   if (JSON.stringify(publicIntent) !== JSON.stringify(publicReceipt) ||
       JSON.stringify(publicAttempt) !== JSON.stringify(publicReceipt))
@@ -106,7 +112,7 @@ export async function recordConfiguredNativeStudioFirstOpen(
   assertNativeStudioGitHubTokenCompatible(github.token);
   if (JSON.stringify(await deps.site(scope, client, env)) !== JSON.stringify(site))
     throw Error('native_studio_configured_first_open_target_changed');
-  return deps.record({ scope, client, store,
+  return deps.record({ scope, client, store: recoveredStore,
     sourceId: built.sourceId, commit: built.commit, tag,
     publicTag: `gnr8-public-first-${publicReceipt.identity}`,
     studioWorkerId: studioWorkerId!, publicWorkerId: publicWorkerId!,
