@@ -8,6 +8,12 @@ import { claimNativeStudioImageDriveAttempt,
 import { pollNativeStudioImageCommand,
   startNativeStudioImageCommand } from './native-studio-image-detached-command';
 import { stageNativeStudioWorkerDependencies } from './native-studio-drive-image-build';
+import { nativeStudioWorkerPreflightCommand } from './native-studio-worker-preflight';
+import { execFile } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
@@ -45,15 +51,15 @@ function fixture() {
     sandboxTimeoutMs: 60 * 60_000 };
   const session = { sessionId: 'sess_123',
     runCommand: async (command: any) => {
-      calls.push(`start:${command.args[0]}`);
+      calls.push(`start:${command.cmd === 'node' ? 'deploy' : command.args[0]}`);
       assert.equal(command.env.DOCKER_HOST, 'unix:///var/run/docker.sock');
-      if (command.cmd === '/usr/local/bin/wrangler') {
-        assert.deepEqual(command.args, command.cwd.endsWith('/studio') ?
-          ['deploy', '--dry-run', '--outdir',
-            '/vercel/sandbox/gnr8-worker-bundle', '--metafile',
-            '/vercel/sandbox/gnr8-worker-bundle-meta.json', '--config',
-            'cloudflare/wrangler.jsonc'] :
-          ['deploy', '--dry-run', '--outdir',
+      if (command.cmd === 'node') {
+        assert.equal(command.args[0], '--input-type=module');
+        assert.match(command.args[2], /builtInProviderSlot/);
+        assert.match(command.args[2], /cloudflare\/wrangler.jsonc/);
+        assert.equal(command.env.CLOUDFLARE_API_TOKEN, undefined);
+      } else if (command.cmd === '/usr/local/bin/wrangler') {
+        assert.deepEqual(command.args, ['deploy', '--dry-run', '--outdir',
             '/vercel/sandbox/gnr8-public-worker-bundle', '--metafile',
             '/vercel/sandbox/gnr8-public-worker-bundle-meta.json', '--config',
             'wrangler.json']);
@@ -167,6 +173,31 @@ test('build and save cross invocations without repeating external effects', asyn
   assert.equal(f.calls.indexOf('public-bundle-record') < f.calls.indexOf('start:save'), true);
   assert.equal(f.calls.filter(v => v === 'stop').length, 1);
   assert.equal(f.calls.indexOf('verify-source') < f.calls.indexOf('inspect'), true);
+});
+
+test('Worker preflight bundles Access and restores the native source', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'gnr8-auth-preflight-'));
+  const slot = join(root, 'src/cloudflare/builtInProviderSlot.ts');
+  const marker = join(root, 'seen-slot');
+  const fake = join(root, 'wrangler');
+  const original = "import type { BuiltInSlot } from '../features/auth/providers/builtIn';\n\nexport const builtInProviderSlot: BuiltInSlot = { id: 'github', create: undefined };\n";
+  try {
+    await mkdir(join(root, 'src/cloudflare'), { recursive: true });
+    await mkdir(join(root, 'cloudflare'));
+    await writeFile(slot, original);
+    await writeFile(join(root, 'cloudflare/wrangler.jsonc'),
+      JSON.stringify({ vars: { AUTH_PROVIDER: 'access' } }));
+    await writeFile(fake, `#!/bin/sh\ncat src/cloudflare/builtInProviderSlot.ts > ${marker}\n`, { mode: 0o700 });
+    const command = nativeStudioWorkerPreflightCommand(fake, root);
+    await promisify(execFile)(command.cmd, command.args, { cwd: command.cwd,
+      env: { PATH: process.env.PATH }, timeout: 10_000 });
+    assert.match(await readFile(marker, 'utf8'), /id: 'access'/);
+    assert.equal(await readFile(slot, 'utf8'), original);
+    await writeFile(fake, '#!/bin/sh\nexit 7\n', { mode: 0o700 });
+    await assert.rejects(promisify(execFile)(command.cmd, command.args,
+      { cwd: command.cwd, env: { PATH: process.env.PATH }, timeout: 10_000 }));
+    assert.equal(await readFile(slot, 'utf8'), original);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('source-bundle dependencies come from the verified image without credentials', async () => {

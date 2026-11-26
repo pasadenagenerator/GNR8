@@ -11,9 +11,8 @@ import { describeNativeStudioDriveImageSource,
 import { pollNativeStudioImageCommand,
   startNativeStudioImageCommand } from './native-studio-image-detached-command';
 import { restrictedNativeStudioImageNetwork } from './native-studio-image-drive';
-import { NATIVE_STUDIO_WORKER_BUNDLE_METAFILE,
-  NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR,
-  NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_METAFILE,
+import { nativeStudioWorkerPreflightCommand } from './native-studio-worker-preflight';
+import { NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_METAFILE,
   NATIVE_STUDIO_PUBLIC_WORKER_BUNDLE_OUTDIR,
   recordNativeStudioWorkerBundle,
   recordNativeStudioPublicWorkerBundle,
@@ -414,14 +413,7 @@ export async function advanceNativeStudioDetachedImageBuild(input: Input,
     await steps.stageWorkerDependencies(builder, stored.tag);
     await steps.startCommand({ ...commandIdentity(input, stored, 'preflight'),
       sandbox: builder,
-      command: { cmd: '/usr/local/bin/wrangler',
-        args: ['deploy', '--dry-run', '--outdir',
-          NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR,
-          '--metafile', NATIVE_STUDIO_WORKER_BUNDLE_METAFILE,
-          '--config', 'cloudflare/wrangler.jsonc'],
-        cwd: `${NATIVE_STUDIO_IMAGE_SOURCE_ROOT}/studio`,
-        env: { CI: '1', DOCKER_HOST, WRANGLER_SEND_METRICS: 'false' },
-        timeoutMs: 15 * 60_000 } });
+      command: nativeStudioWorkerPreflightCommand() });
     return { state: 'running' };
   }
   if (phase === 'preflight') {
