@@ -2766,10 +2766,10 @@ async function fetchAssetBytesWithNodeFallback(input: {
   } catch (error) {
     const asset = new URL(input.url);
     const page = new URL(input.pageUrl);
-    if (!input.allowFallback || asset.protocol !== "https:" ||
+    if (input.init.signal?.aborted || !input.allowFallback || asset.protocol !== "https:" ||
         canonicalAssetHost(asset.hostname) !== canonicalAssetHost(page.hostname)) throw error;
     return new Promise((resolve, reject) => {
-      const request = https.get(asset, { headers: { "accept-encoding": "identity", accept: "image/*,text/css,*/*;q=0.8" } }, (incoming) => {
+      const request = https.get(asset, { signal: input.init.signal ?? undefined, headers: { "accept-encoding": "identity", accept: "image/*,text/css,*/*;q=0.8" } }, (incoming) => {
         const chunks: Buffer[] = [];
         let size = 0;
         incoming.on("data", (chunk: Buffer) => {
@@ -2793,7 +2793,8 @@ async function fetchAssetBytesWithNodeFallback(input: {
           });
         });
       });
-      request.setTimeout(ADDITIONAL_PAGE_ASSET_TIMEOUT_MS, () => request.destroy(new Error("asset_timeout")));
+      // Socket inactivity is not a total deadline: a server can trickle bytes
+      // indefinitely. The caller's signal bounds the whole fallback transfer.
       request.on("error", reject);
     });
   }
@@ -3160,8 +3161,11 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   };
 
   const directUrls = [...refsByUrl.keys()].sort((left, right) => left.localeCompare(right));
-  const limitedDirectUrls = directUrls.slice(0, ADDITIONAL_PAGE_ASSET_MAX_COUNT);
-  for (const omitted of directUrls.slice(ADDITIONAL_PAGE_ASSET_MAX_COUNT)) failedRequiredResources.add(omitted);
+  const needsFetch = (url: string): boolean => outcomeByUrl.get(url)?.fetchStatus !== "fetched";
+  const newDirectUrls = directUrls.filter(needsFetch);
+  const selectedNewDirectUrls = new Set(newDirectUrls.slice(0, ADDITIONAL_PAGE_ASSET_MAX_COUNT));
+  const limitedDirectUrls = directUrls.filter((url) => !needsFetch(url) || selectedNewDirectUrls.has(url));
+  for (const omitted of newDirectUrls.slice(ADDITIONAL_PAGE_ASSET_MAX_COUNT)) failedRequiredResources.add(omitted);
   await mapWithBoundedConcurrency(limitedDirectUrls, ADDITIONAL_PAGE_ASSET_CONCURRENCY, async (resolvedUrl) => {
     const exemplar = refsByUrl.get(resolvedUrl)?.[0];
     if (!exemplar) return;
@@ -3209,21 +3213,23 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       }
     }
   }
-  const remainingBudget = Math.max(0, ADDITIONAL_PAGE_ASSET_MAX_COUNT - limitedDirectUrls.length);
-  const limitedDependencies = [...stylesheetDependencyUrls.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .slice(0, remainingBudget);
-  for (const [omitted] of [...stylesheetDependencyUrls.entries()].slice(remainingBudget)) failedRequiredResources.add(omitted);
+  const remainingBudget = Math.max(0, ADDITIONAL_PAGE_ASSET_MAX_COUNT - selectedNewDirectUrls.size);
+  const sortedDependencies = [...stylesheetDependencyUrls.entries()]
+    .sort(([left], [right]) => left.localeCompare(right));
+  const newDependencies = sortedDependencies.filter(([url]) => needsFetch(url));
+  const selectedNewDependencies = new Set(newDependencies.slice(0, remainingBudget).map(([url]) => url));
+  const limitedDependencies = sortedDependencies.filter(([url]) => !needsFetch(url) || selectedNewDependencies.has(url));
+  for (const [omitted] of newDependencies.slice(remainingBudget)) failedRequiredResources.add(omitted);
   await mapWithBoundedConcurrency(limitedDependencies, ADDITIONAL_PAGE_ASSET_CONCURRENCY, async ([resolvedUrl, meta]) => {
     await fetchOne(resolvedUrl, meta.assetKind, meta.pageUrl);
   });
 
-  let acquiredCount = limitedDirectUrls.length + limitedDependencies.length;
+  let acquiredCount = selectedNewDirectUrls.size + selectedNewDependencies.size;
   const nestedQueue = limitedDependencies
     .filter(([resolvedUrl, meta]) => meta.assetKind === "stylesheet" && outcomeByUrl.get(resolvedUrl)?.fetchStatus === "fetched")
     .map(([resolvedUrl]) => resolvedUrl);
   const scannedStylesheets = new Set(stylesheetUrls);
-  while (nestedQueue.length > 0 && acquiredCount < ADDITIONAL_PAGE_ASSET_MAX_COUNT) {
+  while (nestedQueue.length > 0) {
     const stylesheetUrl = nestedQueue.shift()!;
     if (scannedStylesheets.has(stylesheetUrl)) continue;
     scannedStylesheets.add(stylesheetUrl);
@@ -3234,7 +3240,6 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     try { cssText = fs.readFileSync(path.resolve(input.snapshotRootDirAbs, localPath), "utf8"); } catch { continue; }
     markProvablyUnused(cssText, stylesheetUrl);
     for (const rawRef of extractCssUrlCandidates(cssText)) {
-      if (acquiredCount >= ADDITIONAL_PAGE_ASSET_MAX_COUNT) break;
       const resolvedUrl = retainedDependencyUrl(rawRef, localPath) ?? resolveAssetUrl({
         rawRef,
         baseUrl: new URL(stylesheetUrl),
@@ -3248,10 +3253,15 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       const representative = representativeUrlByIdentity.get(identity) ?? resolvedUrl;
       representativeUrlByIdentity.set(identity, representative);
       aliasToRepresentativeUrl.set(resolvedUrl, representative);
+      if (!stylesheetDependencyUrls.has(representative) && needsFetch(representative) &&
+          acquiredCount >= ADDITIONAL_PAGE_ASSET_MAX_COUNT) {
+        failedRequiredResources.add(representative);
+        continue;
+      }
       assignLocalPath(representative, assetKind);
       if (!stylesheetDependencyUrls.has(representative)) {
         stylesheetDependencyUrls.set(representative, { assetKind, pageUrl: stylesheetUrl, rawRef, resolvedUrl });
-        acquiredCount += 1;
+        if (needsFetch(representative)) acquiredCount += 1;
         await fetchOne(representative, assetKind, stylesheetUrl);
       }
       if (assetKind === "stylesheet" && outcomeByUrl.get(representative)?.fetchStatus === "fetched") {

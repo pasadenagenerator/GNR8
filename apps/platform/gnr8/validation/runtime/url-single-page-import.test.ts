@@ -171,6 +171,43 @@ test("url import keeps CSS references separate from HTML link identities and ret
   }
 });
 
+test("child asset budget counts new transfers, not assets already retained by the seed", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-asset-budget-"));
+  const retainedUrl = "https://example.com/assets/000-retained.png";
+  const retainedPath = "assets/000-retained.png";
+  const newUrls = Array.from({ length: 512 }, (_, index) =>
+    `https://example.com/assets/${String(index + 1).padStart(3, "0")}.png`);
+  fs.mkdirSync(path.join(root, "assets"), { recursive: true });
+  fs.writeFileSync(path.join(root, retainedPath), new Uint8Array([1]));
+  const fetched = new Set<string>();
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [{
+        pageUrl: "https://example.com/about",
+        bodyPath: path.join(root, "about.html"),
+        html: [retainedUrl, ...newUrls].map((url) => `<img src="${url}">`).join(""),
+      }],
+      existingFetchManifest: [{
+        tag: "img", attribute: "src", occurrence: 0, rawRef: retainedUrl,
+        resolvedUrl: retainedUrl, localPath: retainedPath, assetKind: "image",
+        fetchStatus: "fetched", httpStatus: 200, contentType: "image/png", byteLength: 1,
+      }],
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        assert.notEqual(url, retainedUrl);
+        fetched.add(url);
+        return new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } });
+      },
+    });
+    assert.equal(fetched.size, newUrls.length);
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    assert.equal(result.pages[0]?.fetchedAssetCount, newUrls.length + 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("additional child-page asset capture persists responsive and lazy images, deduplicates shared assets, and reports failures", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-page-assets-"));
   const existingCdnFontPath = "assets/style_asset/existing-cdn-font.woff2";
