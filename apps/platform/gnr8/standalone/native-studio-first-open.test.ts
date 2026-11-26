@@ -85,7 +85,7 @@ test('Access first-open verifies dual-host binding, policy and both challenges',
   await recordNativeStudioFirstOpen(input, deps as any);
   assert.equal(entryChecks, 1);
   assert.equal(f.calls.entry, 0);
-  assert.deepEqual(sourceProof, { store: f.store, sourceId, site });
+  assert.deepEqual(sourceProof, { store: f.store, sourceId, commit, site });
   await assert.rejects(recordNativeStudioFirstOpen({ ...input, accessZoneId: '0'.repeat(32) },
     deps as any), /access_unverified/);
   assert.equal(entryChecks, 1);

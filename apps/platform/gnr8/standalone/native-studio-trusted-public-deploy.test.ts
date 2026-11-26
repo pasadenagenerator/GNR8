@@ -57,7 +57,7 @@ async function fixture() {
     head: async () => ({ repositoryId: site.repositoryId,
       branch: site.branch, commit }),
     studio: async (...args: unknown[]) => {
-      assert.deepEqual(args[8], { store, sourceId, site });
+      assert.deepEqual(args[8], { store, sourceId, commit, site });
       return { state: 'verified-source-control-plane', workerId: studioWorkerId };
     },
     vacancy: async () => { calls.push('vacancy'); return {

@@ -56,7 +56,8 @@ deps = defaults) {
     const active = await deps.studio(input.scope, input.client,
       prepared.site.accountId, prepared.workerId, cloudflareCredential,
       transport, studio.tag, true, { store: prepared.store,
-        sourceId: prepared.sourceId, site: prepared.site });
+        sourceId: prepared.sourceId, commit: prepared.commit,
+        site: prepared.site });
     if (active.state !== 'verified-source-control-plane' ||
         active.workerId !== prepared.workerId)
       throw Error('native_studio_public_deploy_studio_unverified');

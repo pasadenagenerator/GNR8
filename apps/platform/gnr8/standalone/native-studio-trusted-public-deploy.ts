@@ -108,7 +108,7 @@ deps = defaults) {
     deps.head(scope, client, env, transport),
     deps.studio(scope, client, site.accountId, studioWorkerId,
       cloudflareCredential, transport, studioTag, true,
-      { store, sourceId, site }),
+      { store, sourceId, commit, site }),
     deps.vacancy(scope, site.accountId, publicWorkerId, domain,
       cloudflareCredential, transport),
   ]);

@@ -69,7 +69,8 @@ deps = defaults) {
         observed = await deps.inspect(checkoutInput.scope, checkoutInput.client,
           prepared.site.accountId, prepared.workerId, cloudflareCredential,
           transport, expectedIdentity.tag, true,
-          { store: prepared.store, sourceId: prepared.sourceId, site: prepared.site });
+          { store: prepared.store, sourceId: prepared.sourceId,
+            commit: prepared.commit, site: prepared.site });
       } catch {
         return { state: 'pending-review' as const, commit: prepared.commit,
           observation: 'readback-unavailable' };

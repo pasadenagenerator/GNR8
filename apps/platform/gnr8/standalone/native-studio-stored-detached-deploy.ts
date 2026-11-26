@@ -106,7 +106,8 @@ deps = defaults) {
       inspect: (credential, tag) => deps.inspect(input.scope,
         input.client, site.accountId, input.workerId,
         credential, transport, tag, true,
-        { store, sourceId: input.sourceId, site }),
+        { store, sourceId: input.sourceId,
+          commit: input.sourceCommit, site }),
     });
   } finally { await restored?.cleanup(); }
 }

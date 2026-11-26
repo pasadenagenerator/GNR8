@@ -145,7 +145,7 @@ export async function recordNativeStudioFirstOpen(input: {
   }
   const [studio, publicSite, entry, githubHead] = await Promise.all([
     deps.studio(scope, client, site.accountId, studioWorkerId,
-      studioCredential, fetch, tag, true, { store, sourceId, site }),
+      studioCredential, fetch, tag, true, { store, sourceId, commit, site }),
     deps.gateway(scope, client, site.accountId, publicWorkerId,
       publicCredential, fetch, publicTag),
     access ? Promise.resolve({ state: 'access-studio-challenge-observed' as const,
