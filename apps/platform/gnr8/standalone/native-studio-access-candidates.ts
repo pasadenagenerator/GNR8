@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { listAgencyMembers, type AgencyMemberRow } from '../agency/agency-membership-service';
 import type { NativeStudioScope } from './native-studio-binding-store';
+import { getSuperadminPool } from '../../src/superadmin/db';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -14,10 +15,27 @@ export type NativeStudioAccessCandidate = {
 
 type Dependencies = {
   listMembers: (input: { agencyId: string }) => Promise<AgencyMemberRow[]>;
+  findGlobalSuperadmin: () => Promise<{ user_id: string; email: string } | null>;
   now: () => number;
 };
 
-const defaults: Dependencies = { listMembers: listAgencyMembers, now: Date.now };
+async function findGlobalSuperadmin() {
+  const email = (process.env.GNR8_NATIVE_STUDIO_GLOBAL_SUPERADMIN_EMAIL ?? '')
+    .trim().toLowerCase();
+  if (!email) return null;
+  if (!EMAIL.test(email) || !(process.env.SUPERADMIN_EMAILS ?? '').split(',')
+    .some(value => value.trim().toLowerCase() === email))
+    throw Error('native_studio_access_global_superadmin_invalid');
+  const result = await getSuperadminPool().query<{ user_id: string; email: string }>(
+    `select id::text as user_id, lower(email) as email from auth.users
+     where lower(email) = $1::text limit 2`, [email]);
+  if (result.rows.length !== 1 || result.rows[0].email !== email)
+    throw Error('native_studio_access_global_superadmin_unverified');
+  return result.rows[0];
+}
+
+const defaults: Dependencies = { listMembers: listAgencyMembers,
+  findGlobalSuperadmin, now: Date.now };
 
 /** Resolve candidate Cloudflare Access principals from current GNR8 authority.
  * A confirmed Supabase email is only a candidate: Access must separately
@@ -31,7 +49,9 @@ export async function readCurrentNativeStudioAccessCandidates(
 ): Promise<NativeStudioAccessCandidate[]> {
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId].every(id =>
       typeof id === 'string' && UUID.test(id)) || !client ||
-      typeof deps?.listMembers !== 'function' || typeof deps.now !== 'function')
+      typeof deps?.listMembers !== 'function' ||
+      typeof deps.findGlobalSuperadmin !== 'function' ||
+      typeof deps.now !== 'function')
     throw Error('native_studio_access_scope_invalid');
 
   const site = await client.from('sites').select('id').eq('id', scope.siteId)
@@ -43,6 +63,13 @@ export async function readCurrentNativeStudioAccessCandidates(
   if (!Array.isArray(members)) throw Error('native_studio_access_members_unavailable');
   const eligible = members.filter(member => member.role === 'owner' || member.role === 'admin');
   if (!eligible.length) throw Error('native_studio_access_admin_missing');
+  const globalSuperadmin = await deps.findGlobalSuperadmin();
+  if (globalSuperadmin && (!UUID.test(globalSuperadmin.user_id) ||
+      !EMAIL.test(globalSuperadmin.email)))
+    throw Error('native_studio_access_global_superadmin_unverified');
+  if (globalSuperadmin && !eligible.some(member =>
+      member.user_id === globalSuperadmin.user_id))
+    eligible.push({ user_id: globalSuperadmin.user_id, role: 'admin' } as AgencyMemberRow);
   const seenUsers = new Set<string>();
   const seenEmails = new Set<string>();
   const candidates: NativeStudioAccessCandidate[] = [];
@@ -62,6 +89,9 @@ export async function readCurrentNativeStudioAccessCandidates(
     const pendingEmailChange = String((user as unknown as Record<string, unknown>)
       .email_change ?? '').trim();
     const email = String(user.email ?? '').trim().toLowerCase();
+    if (globalSuperadmin?.user_id === member.user_id &&
+        email !== globalSuperadmin.email)
+      throw Error('native_studio_access_global_superadmin_unverified');
     if (user.banned_until && !Number.isFinite(bannedUntil))
       throw Error('native_studio_access_identity_unverified');
     // A known ineligible member must be removed from the effective policy.

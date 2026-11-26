@@ -22,6 +22,7 @@ function fixture(options: {
   users?: Record<string, Record<string, unknown>>;
   site?: string | null;
   error?: boolean;
+  globalSuperadmin?: { user_id: string; email: string } | null;
 } = {}) {
   const reads: string[] = [];
   const members = options.members ?? [member(ownerId, 'owner'), member(adminId, 'admin'),
@@ -45,7 +46,9 @@ function fixture(options: {
   auth: { admin: { async getUserById(id: string) { reads.push(id);
     return { error: null, data: { user: users[id] ?? null } }; } } } } as unknown as SupabaseClient;
   const deps = { listMembers: async ({ agencyId }: { agencyId: string }) => {
-    assert.equal(agencyId, scope.agencyId); return members; }, now: () => now };
+    assert.equal(agencyId, scope.agencyId); return members; },
+    findGlobalSuperadmin: async () => options.globalSuperadmin ?? null,
+    now: () => now };
   return { client, deps, reads };
 }
 
@@ -56,6 +59,36 @@ test('returns only current owner/admin Access candidates from confirmed auth ema
     { userId: ownerId, principal: 'access:owner@example.com', role: 'owner' },
   ]);
   assert.deepEqual(f.reads.sort(), [ownerId, adminId].sort());
+});
+
+test('adds the verified global superadmin to the same Access and Stacki candidate list', async () => {
+  const globalId = '77777777-7777-4777-8777-777777777777';
+  const identity = { user_id: globalId, email: 'info@pasadenagenerator.com' };
+  const f = fixture({ globalSuperadmin: identity,
+    users: { [ownerId]: { id: ownerId, email: 'owner@example.com',
+      email_confirmed_at: '2026-11-20T00:00:00Z' },
+      [globalId]: { id: globalId, email: identity.email,
+        email_confirmed_at: '2026-11-20T00:00:00Z' } },
+    members: [member(ownerId, 'owner')] });
+  assert.deepEqual(await readCurrentNativeStudioAccessCandidates(scope, f.client, f.deps), [
+    { userId: globalId, principal: 'access:info@pasadenagenerator.com', role: 'admin' },
+    { userId: ownerId, principal: 'access:owner@example.com', role: 'owner' },
+  ]);
+  assert.deepEqual(f.reads.sort(), [ownerId, globalId].sort());
+});
+
+test('does not duplicate a superadmin who already administers the agency', async () => {
+  const f = fixture({ globalSuperadmin: { user_id: ownerId,
+    email: 'owner@example.com' } });
+  assert.equal((await readCurrentNativeStudioAccessCandidates(scope, f.client, f.deps))
+    .filter(candidate => candidate.userId === ownerId).length, 1);
+});
+
+test('rejects a global identity whose current auth email differs', async () => {
+  const f = fixture({ globalSuperadmin: { user_id: ownerId,
+    email: 'info@pasadenagenerator.com' } });
+  await assert.rejects(readCurrentNativeStudioAccessCandidates(scope, f.client, f.deps),
+    /native_studio_access_global_superadmin_unverified/);
 });
 
 test('rejects a changed site scope or an unavailable site before reading identities', async () => {

@@ -220,6 +220,11 @@ configuration. Preserve the original commit/manifest as migration provenance.
   an existing Workers Builds trigger.
 - Native GitHub authentication remains authoritative. Only configure launch
   bindings after these requirements pass; missing bindings fail closed.
+- To grant one GNR8 superadmin access to every current and future native Studio,
+  set `GNR8_NATIVE_STUDIO_GLOBAL_SUPERADMIN_EMAIL` to that person's confirmed
+  Supabase email. The same address must already be in `SUPERADMIN_EMAILS`.
+  The normal Access policy and `.stacki/roles.json` reconciliation then add or
+  remove that exact identity; existing agency owner/admin access remains.
 
 All provider writes, credential setup and exact-host migrations need the task's
 external rollout authorization. Do not present an offline receipt as hosting proof.
