@@ -19,6 +19,7 @@ const HANDOFF = 'native-studio/build-handoff-v1.json';
 const SHA = /^[a-f0-9]{64}$/;
 const COMMIT = /^[a-f0-9]{40,64}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
+const DOMAIN_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const TAG = /^gnr8-first-[a-f0-9]{64}$/;
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -47,7 +48,7 @@ function validReceipt(value: unknown, scope: NativeStudioScope, site: Site): val
       !HEX32.test(value.publicWorkerId as string) ||
       !UUID.test(value.studioVersionId as string) ||
       !UUID.test(value.publicVersionId as string) ||
-      !HEX32.test(value.domainId as string) ||
+      typeof value.domainId !== 'string' || !DOMAIN_ID.test(value.domainId) ||
       typeof value.verifiedAt !== 'string' ||
       !Number.isFinite(Date.parse(value.verifiedAt)) ||
       Date.parse(value.verifiedAt) > Date.now()) return false;
@@ -156,7 +157,7 @@ export async function recordNativeStudioFirstOpen(input: {
       studio.workerId !== studioWorkerId || !UUID.test(studio.versionId) ||
       publicSite.state !== 'observed-control-plane' ||
       publicSite.workerId !== publicWorkerId || !UUID.test(publicSite.versionId) ||
-      !HEX32.test(publicSite.domainId) ||
+      typeof publicSite.domainId !== 'string' || !DOMAIN_ID.test(publicSite.domainId) ||
       entry.state !== (access ? 'access-studio-challenge-observed' : 'public-studio-entry-healthy') ||
       entry.studioOrigin !== site.studioOrigin ||
       githubHead.repositoryId !== site.repositoryId ||

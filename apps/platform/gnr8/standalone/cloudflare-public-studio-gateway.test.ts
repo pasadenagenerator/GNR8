@@ -62,6 +62,9 @@ test('checks the active public Worker, exact Studio binding and routed domain', 
   (f.result['/workers/domains'] as { id: string }[])[0].id = 'd'.repeat(32);
   assert.equal((await inspectCloudflarePublicStudioGateway(scope, accountId,
     workerId, domain, credential, f.transport)).domainId, 'd'.repeat(32));
+  (f.result['/workers/domains'] as { id: string }[])[0].id = 'domain_123';
+  assert.equal((await inspectCloudflarePublicStudioGateway(scope, accountId,
+    workerId, domain, credential, f.transport)).domainId, 'domain_123');
 });
 
 test('active public version must carry the exact first-deploy tag', async () => {
@@ -131,7 +134,7 @@ test('rejects split traffic, wrong Studio target and foreign domain', async () =
   await assert.rejects(inspectCloudflarePublicStudioGateway(scope, accountId,
     workerId, domain, credential, f.transport), /domain_routing_conflict/);
   routed.enabled = true;
-  routed.id = 'invalid';
+  routed.id = 'invalid/id';
   await assert.rejects(inspectCloudflarePublicStudioGateway(scope, accountId,
     workerId, domain, credential, f.transport), /domain_id_conflict/);
 });
