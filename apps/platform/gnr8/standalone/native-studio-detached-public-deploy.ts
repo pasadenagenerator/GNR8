@@ -106,7 +106,7 @@ async function observe(input: Input, credential: string, tag: string): Promise<R
       commit: input.commit, observation: result.state };
   } catch (error) {
     const reason = error instanceof Error ? error.message : '';
-    if (/^native_studio_public_gateway_(?:worker|version|source|binding|domain)_conflict$/.test(reason))
+    if (/^native_studio_public_gateway_(?:worker|version|source|binding|domain(?:_(?:count|target|routing|id))?)_conflict$/.test(reason))
       return { state: 'pending-review', commit: input.commit,
         observation: reason };
     return { state: 'pending-review', commit: input.commit,

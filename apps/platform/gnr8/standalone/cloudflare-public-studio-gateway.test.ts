@@ -123,7 +123,17 @@ test('rejects split traffic, wrong Studio target and foreign domain', async () =
   version.resources.bindings.find(binding => binding.name === 'STUDIO')!.service = studio;
   (f.result['/workers/domains'] as { service: string }[])[0].service = 'another-site';
   await assert.rejects(inspectCloudflarePublicStudioGateway(scope, accountId,
-    workerId, domain, credential, f.transport), /domain_conflict/);
+    workerId, domain, credential, f.transport), /domain_target_conflict/);
+  const routed = (f.result['/workers/domains'] as {
+    service: string; enabled: boolean; id: string }[])[0];
+  routed.service = worker;
+  routed.enabled = false;
+  await assert.rejects(inspectCloudflarePublicStudioGateway(scope, accountId,
+    workerId, domain, credential, f.transport), /domain_routing_conflict/);
+  routed.enabled = true;
+  routed.id = 'invalid';
+  await assert.rejects(inspectCloudflarePublicStudioGateway(scope, accountId,
+    workerId, domain, credential, f.transport), /domain_id_conflict/);
 });
 
 test('scoped wrapper refuses missing repository before any provider read', async () => {
