@@ -1429,17 +1429,23 @@ async function readResponseBytesWithLimit(response: Response, maxBytes: number):
   return { bytes: Buffer.concat(chunks).subarray(0, maxBytes + 1), truncated }
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+async function fetchHtmlPageWithTimeout(url: string, timeoutMs: number, maxBytes: number): Promise<{
+  response: Response
+  bytes: Buffer
+  truncated: boolean
+}> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    return await fetch(url, {
+    const response = await fetch(url, {
       redirect: 'follow',
       signal: controller.signal,
       headers: {
         accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1',
       },
     })
+    const { bytes, truncated } = await readResponseBytesWithLimit(response, maxBytes)
+    return { response, bytes, truncated }
   } finally {
     clearTimeout(timeout)
   }
@@ -1531,7 +1537,30 @@ async function acquireScopedMultiPageHtml(input: {
     }),
   )
 
+  const maxPages = input.option.htmlAcquisitionLimits.maxPages
+  const pending = new Map<number, Promise<{ page: Awaited<ReturnType<typeof fetchHtmlPageWithTimeout>> | null; error: unknown }>>()
+  let nextPrefetchIndex = 0
+  const prefetchPages = (candidateIndex: number) => {
+    const end = Math.min(candidates.length, maxPages, candidateIndex + 4)
+    while (nextPrefetchIndex < end) {
+      const index = nextPrefetchIndex++
+      const candidate = candidates[index]
+      const url = normalizeText(candidate.normalizedUrl)
+      if (!url || !evaluateMultipageSameSiteUrl({
+        candidateUrl: url,
+        seedUrl: normalizedSeed.url,
+        evidenceUrls: [candidate.absoluteUrl, candidate.normalizedUrl],
+      }).accepted) continue
+      pending.set(index, fetchHtmlPageWithTimeout(
+        url,
+        input.option.htmlAcquisitionLimits.requestTimeoutMs,
+        input.option.htmlAcquisitionLimits.maxBytesPerPage,
+      ).then(page => ({ page, error: null }), error => ({ page: null, error })))
+    }
+  }
+
   for (const [candidateIndex, candidate] of candidates.entries()) {
+    prefetchPages(candidateIndex)
     if (candidateIndex >= input.option.htmlAcquisitionLimits.maxPages) {
       diagnostics.push('MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED')
       pages.push(
@@ -1578,7 +1607,18 @@ async function acquireScopedMultiPageHtml(input: {
     }
 
     try {
-      const response = await fetchWithTimeout(normalizedUrl, input.option.htmlAcquisitionLimits.requestTimeoutMs)
+      const prefetched = pending.get(candidateIndex)
+      pending.delete(candidateIndex)
+      const fetched = prefetched
+        ? await prefetched
+        : await fetchHtmlPageWithTimeout(
+            normalizedUrl,
+            input.option.htmlAcquisitionLimits.requestTimeoutMs,
+            input.option.htmlAcquisitionLimits.maxBytesPerPage,
+          ).then(page => ({ page, error: null }), error => ({ page: null, error }))
+      if (fetched.error) throw fetched.error
+      if (!fetched.page) throw new Error('MULTIPAGE_HTML_FETCH_MISSING')
+      const { response, bytes, truncated } = fetched.page
       const finalUrl = normalizeText(response.url) || normalizedUrl
       const finalNormalized = normalizeSeedUrl(finalUrl)
       const finalSameSite = evaluateMultipageSameSiteUrl({
@@ -1640,7 +1680,6 @@ async function acquireScopedMultiPageHtml(input: {
         continue
       }
 
-      const { bytes, truncated } = await readResponseBytesWithLimit(response, input.option.htmlAcquisitionLimits.maxBytesPerPage)
       if (truncated) {
         diagnostics.push('MULTIPAGE_HTML_FETCH_SKIPPED')
         pages.push({

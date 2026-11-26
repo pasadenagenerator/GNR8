@@ -1899,6 +1899,8 @@ test('scoped pipeline raw multi-page assembly creates deterministic raw artifact
 test('scoped pipeline uses priority-balanced route order for Viroidoc-like acquisition and assembly budgets', async () => {
   const topLevelRoutes = ['/blog', '/people', '/project', '/learn', '/news', '/subscribe']
   const articleRoutes = Array.from({ length: 25 }, (_, index) => `/b/article-${String(index + 1).padStart(2, '0')}`)
+  let inFlightPages = 0
+  let peakInFlightPages = 0
   const server = http.createServer((req, res) => {
     const url = req.url ?? '/'
     if (url === '/robots.txt') {
@@ -1917,12 +1919,17 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
     }
     const routePath = url.split('?')[0] ?? '/'
     if (routePath === '/' || topLevelRoutes.includes(routePath) || articleRoutes.includes(routePath)) {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-      res.end(
-        `<!doctype html><html><body><header><nav>${topLevelRoutes
-          .map((childRoute) => `<a href="${childRoute}">${childRoute}</a>`)
-          .join('')}</nav></header><h1>${routePath}</h1></body></html>`,
-      )
+      inFlightPages += 1
+      peakInFlightPages = Math.max(peakInFlightPages, inFlightPages)
+      setTimeout(() => {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        res.end(
+          `<!doctype html><html><body><header><nav>${topLevelRoutes
+            .map((childRoute) => `<a href="${childRoute}">${childRoute}</a>`)
+            .join('')}</nav></header><h1>${routePath}</h1></body></html>`,
+        )
+        inFlightPages -= 1
+      }, 5)
       return
     }
     res.writeHead(404, { 'content-type': 'text/plain' })
@@ -2085,6 +2092,7 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
       assert.equal(assembledRoutes.includes(routePath), true, `${routePath} should be assembled`)
     }
     assert.deepEqual(skippedTopLevelRoutes, [])
+    assert.equal(peakInFlightPages, 4)
 
     const firstArticleAcquisitionIndex = acquiredRoutes.findIndex((routePath: string) => routePath.startsWith('/b/'))
     const lastRequiredTopLevelIndex = Math.max(...['/blog', '/people', '/project', '/learn', '/news'].map((routePath) => acquiredRoutes.indexOf(routePath)))
