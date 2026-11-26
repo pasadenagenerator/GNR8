@@ -2118,6 +2118,7 @@ async function buildScopedMultiPageDiscovery(input: {
   snapshot: UrlSinglePageImportSnapshot
   verifyCssUsage?: boolean
   approvedUnusedCssDependencies?: string[]
+  requireCompleteCapture?: boolean
 }): Promise<{
   summary: MultiPageDiscoverySummary
   manifest: MultiPageDiscoveryManifest | null
@@ -2603,6 +2604,12 @@ async function buildScopedMultiPageDiscovery(input: {
       diagnostics: manifest.diagnostics.slice(),
     },
     manifest,
+  }
+  // A complete Git archive cannot succeed once discovery has already omitted
+  // required routes. Stop before acquiring hundreds of pages and assets.
+  if (input.requireCompleteCapture && sortedSkippedLinks.some((link) =>
+    link.skippedReason === 'route_limit' || link.skippedReason === 'max_links_per_page')) {
+    throw new Error('GITHUB_IMPORT_INCOMPLETE_CAPTURE:route_limited')
   }
   const acquisition = await acquireScopedMultiPageHtml({
     sourceUrl: input.sourceUrl,
@@ -3888,6 +3895,7 @@ export async function runScopedImportPipeline(input: {
     sourceUrl: input.sourceUrl,
     snapshot: input.snapshot,
     verifyCssUsage: gitArchiveRequired && gitArchiveSelected,
+    requireCompleteCapture: gitArchiveRequired && gitArchiveSelected,
     approvedUnusedCssDependencies: [
       ...approvedUnusedCssDependencies(input.sourceUrl, input.ownershipScope?.siteId),
       ...input.snapshot.fetchManifest
