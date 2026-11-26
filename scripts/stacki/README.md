@@ -10,7 +10,8 @@ accepted these exact native controls. No generated EditorHeader patch is used.
 bounded GitHub-to-release-assets redirects and verifies the entire payload before
 caching. There are no requests on module import.
 
-Existing 1.4.13 sites can be upgraded in a **clean, disposable checkout** with
+Existing sites pinned to reviewed releases 1.0.22, 1.4.2, 1.4.8 or 1.4.13
+can be upgraded in a **clean, disposable checkout** with
 `node scripts/stacki/upgrade-native-studio.mjs SITE_CHECKOUT OLD_RELEASE_JSON NEW_RELEASE_JSON`.
 Both original release bundles must match their pinned SHA-256 hashes. The upgrader
 checks every old native file before writing, replaces only upstream `studio/`
