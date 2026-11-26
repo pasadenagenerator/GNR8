@@ -117,6 +117,33 @@ test('identifies the exact conflicting export property without exposing metadata
     accountId, workerId, domain, credential, f.transport), /export_storage_conflict/);
 });
 
+test('corroborates an omitted exports map through the active namespace', async () => {
+  const f = fixture();
+  const namespaceId = '9'.repeat(32);
+  const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
+    resources: { script_runtime: { exports?: unknown }; bindings: {
+      name: string; namespace_id?: string }[] } };
+  delete version.resources.script_runtime.exports;
+  version.resources.bindings.find(binding => binding.name === 'PREVIEW')!
+    .namespace_id = namespaceId;
+  f.result['/containers/applications'] = [
+    { id: 'other', name: 'other', account_id: accountId,
+      scheduling_policy: 'durable_object',
+      durable_objects: { namespace_id: '8'.repeat(32) } },
+    { id: 'container-app-id', name: 'generated-name', account_id: accountId,
+      scheduling_policy: 'durable_object',
+      durable_objects: { namespace_id: namespaceId } },
+  ];
+  assert.equal((await inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag,
+    expectedRepository, true)).state, 'verified-source-control-plane');
+  assert(f.calls.includes('/containers/applications'));
+  version.resources.bindings.find(binding => binding.name === 'PREVIEW')!
+    .namespace_id = '7'.repeat(32);
+  assert.equal((await inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport)).state, 'pending');
+});
+
 test('corroborates the exact first deploy tag on the actively serving version', async () => {
   const f = fixture();
   assert.deepEqual(await inspectCloudflareStudioFirstDeployment(scope,

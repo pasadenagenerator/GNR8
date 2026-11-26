@@ -101,16 +101,20 @@ export async function inspectCloudflareStudioFirstDeployment(
     throw Error('native_studio_first_deployment_version_shape_conflict');
   if (!object(version.resources.script_runtime))
     throw Error('native_studio_first_deployment_runtime_missing');
-  if (!object(version.resources.script_runtime.exports))
-    throw Error('native_studio_first_deployment_exports_missing');
-  if (!object(version.resources.script_runtime.exports.PreviewContainer))
-    throw Error('native_studio_first_deployment_preview_export_missing');
-  if (version.resources.script_runtime.exports.PreviewContainer.type !== 'durable-object')
-    throw Error('native_studio_first_deployment_export_type_conflict');
-  if (version.resources.script_runtime.exports.PreviewContainer.storage !== 'sqlite')
-    throw Error('native_studio_first_deployment_export_storage_conflict');
-  if (version.resources.script_runtime.exports.PreviewContainer.state === 'deleted')
-    throw Error('native_studio_first_deployment_export_deleted');
+  const exports = version.resources.script_runtime.exports;
+  // Cloudflare may omit the optional exports map on a version read. In that
+  // case the active PREVIEW namespace and its Container application provide
+  // the same site-scoped relationship without inferring an application name.
+  if (exports !== undefined) {
+    if (!object(exports) || !object(exports.PreviewContainer))
+      throw Error('native_studio_first_deployment_preview_export_missing');
+    if (exports.PreviewContainer.type !== 'durable-object')
+      throw Error('native_studio_first_deployment_export_type_conflict');
+    if (exports.PreviewContainer.storage !== 'sqlite')
+      throw Error('native_studio_first_deployment_export_storage_conflict');
+    if (exports.PreviewContainer.state === 'deleted')
+      throw Error('native_studio_first_deployment_export_deleted');
+  }
   // Cloudflare documents both fields as optional in a version read. Their
   // absence does not contradict the tagged, active Durable Object export.
   if (version.resources.script_runtime.migration_tag !== undefined &&
@@ -122,8 +126,10 @@ export async function inspectCloudflareStudioFirstDeployment(
         (!Array.isArray(version.resources.script.handlers) ||
           !version.resources.script.handlers.includes('fetch'))))
     throw Error('native_studio_first_deployment_handler_conflict');
-  const container = version.resources.script_runtime.exports.PreviewContainer.container;
-  if (typeof container !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(container))
+  const container = object(exports) && object(exports.PreviewContainer)
+    ? exports.PreviewContainer.container : undefined;
+  if (exports !== undefined && (typeof container !== 'string' ||
+      !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(container)))
     throw Error('native_studio_first_deployment_container_conflict');
   if (!Array.isArray(version.resources.bindings))
     throw Error('native_studio_first_deployment_provider_invalid');
@@ -163,20 +169,33 @@ export async function inspectCloudflareStudioFirstDeployment(
         !plain('AUTH_BOOTSTRAP_ADMIN', expectedAccess.admins[0]))) ||
       (expectedRepository !== undefined && !plain('GITHUB_REPOSITORY', expectedRepository)))
     throw Error('native_studio_first_deployment_binding_conflict');
-  const applications = await read(`/containers/applications?name=${encodeURIComponent(container)}`);
+  const namespaceId = object(preview[0]) ? preview[0].namespace_id : undefined;
+  if (exports === undefined && (typeof namespaceId !== 'string' ||
+      !HEX32.test(namespaceId)))
+    throw Error('native_studio_first_deployment_namespace_conflict');
+  const applications = await read(typeof container === 'string'
+    ? `/containers/applications?name=${encodeURIComponent(container)}`
+    : '/containers/applications');
   if (!Array.isArray(applications))
     throw Error('native_studio_first_deployment_provider_invalid');
-  if (!applications.length)
+  const matching = container ? applications : applications.filter(value =>
+    object(value) && object(value.durable_objects) &&
+    value.durable_objects.namespace_id === namespaceId);
+  if (!matching.length)
     return { state: 'pending' as const, worker, reason: 'container-application-missing' as const };
-  if (applications.length !== 1 || !object(applications[0]) ||
-      applications[0].name !== container || applications[0].account_id !== accountId ||
-      applications[0].scheduling_policy !== 'durable_object' ||
-      typeof applications[0].id !== 'string' || !applications[0].id)
+  if (matching.length !== 1 || !object(matching[0]) ||
+      (container ? matching[0].name !== container :
+        typeof matching[0].name !== 'string' || !matching[0].name) ||
+      matching[0].account_id !== accountId ||
+      matching[0].scheduling_policy !== 'durable_object' ||
+      (namespaceId !== undefined && (!object(matching[0].durable_objects) ||
+        matching[0].durable_objects.namespace_id !== namespaceId)) ||
+      typeof matching[0].id !== 'string' || !matching[0].id)
     throw Error('native_studio_first_deployment_container_conflict');
   return { state: expectedTag ? 'verified-source-control-plane' as const
     : 'observed-control-plane' as const, worker, workerId,
     deploymentId: latest.id as string, versionId,
-    containerApplicationId: applications[0].id as string };
+    containerApplicationId: matching[0].id as string };
 }
 
 /** A hosted caller must resolve the current site and repository from the
