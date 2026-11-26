@@ -2,13 +2,38 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
+import { createClient } from '@supabase/supabase-js'
 
 import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
 import { resolveUrlImportSnapshotRootDirAbs } from '@/gnr8/validation/runtime/url-import-snapshot-root'
 import { UrlImportSeedCheckpoint } from './url-import-seed-checkpoint'
 
+test('missing checkpoint is recognized through the real Supabase Storage download wrapper', async () => {
+  const client = createClient('https://storage.example.test', 'service-role-test-key', {
+    global: { fetch: async (input, init) => {
+      const url = String(input)
+      if (url.endsWith('/storage/v1/bucket/private-bucket'))
+        return Response.json({ name: 'private-bucket', public: false })
+      if (init?.method === 'POST' && url.endsWith('/storage/v1/object/list/private-bucket'))
+        return Response.json([])
+      if (init?.method === 'GET' && url.includes('/storage/v1/object/private-bucket/'))
+        return Response.json({ statusCode: 'NoSuchKey', error: 'not_found', message: 'Object not found' },
+          { status: 400 })
+      throw new Error(`Unexpected storage request: ${init?.method} ${url}`)
+    } },
+  })
+  const checkpoint = new UrlImportSeedCheckpoint(client, 'private-bucket', {
+    agencyId: '11111111-1111-4111-8111-111111111111',
+    clientId: '22222222-2222-4222-8222-222222222222',
+    siteVersionId: '33333333-3333-4333-8333-333333333333',
+    importAttemptId: '44444444-4444-4444-8444-444444444444',
+  })
+  assert.equal(await checkpoint.load('https://example.com/'), null)
+})
+
 test('seed capture is restored from private storage for the same import identity', async () => {
   const objects = new Map<string, Buffer>()
+  let rejectExisting = false
   const storage = {
     getBucket: async () => ({ data: { public: false }, error: null }),
     from: () => ({
@@ -19,10 +44,17 @@ test('seed capture is restored from private storage for the same import identity
       },
       download: async (key: string) => {
         const body = objects.get(key)
-        return body
+        return body && !rejectExisting
           ? { data: new Blob([new Uint8Array(body)]), error: null }
-          : { data: null, error: { status: 404, statusCode: 'NoSuchKey', message: 'Object not found' } }
+          : { data: null, error: { name: 'StorageUnknownError', message: '{}',
+            originalError: { status: 400 } } }
       },
+      list: async (folder: string, options: { search: string }) => ({
+        data: [...objects.keys()].filter((key) => key.startsWith(`${folder}/`))
+          .map((key) => ({ name: key.slice(folder.length + 1) }))
+          .filter((entry) => entry.name === options.search),
+        error: null,
+      }),
     }),
   }
   const identity = {
@@ -51,6 +83,9 @@ test('seed capture is restored from private storage for the same import identity
   try {
     assert.equal(await checkpoint.load(snapshot.sourceUrl), null)
     await checkpoint.save(snapshot)
+    rejectExisting = true
+    await assert.rejects(checkpoint.load(snapshot.sourceUrl), /URL_IMPORT_SEED_CHECKPOINT_INVALID/)
+    rejectExisting = false
     fs.rmSync(root, { recursive: true, force: true })
     const restored = await checkpoint.load(snapshot.sourceUrl)
     assert.ok(restored?.snapshotRootDirAbs.startsWith(path.join(stableRoot, 'runs', 'resume-')))

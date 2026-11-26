@@ -71,9 +71,21 @@ export class UrlImportSeedCheckpoint {
   }
 
   private async read(key: string): Promise<Buffer | null> {
-    const result = await (await this.bucket()).download(key)
+    const bucket = await this.bucket()
+    const result = await bucket.download(key)
     if (result.error) {
       if (isMissing(result.error)) return null
+      // Storage JS downloads blobs without parsing error JSON. Supabase can return
+      // HTTP 400 for a missing object, wrapped as StorageUnknownError. Verify the
+      // exact object name before treating that otherwise ambiguous error as absent.
+      const originalError = (result.error as { originalError?: { status?: unknown } }).originalError
+      if (originalError?.status === 400) {
+        const slash = key.lastIndexOf('/')
+        const name = key.slice(slash + 1)
+        const listing = await bucket.list(key.slice(0, slash), { search: name, limit: 2 })
+        if (listing.error || !listing.data) fail()
+        if (!listing.data.some((entry) => entry.name === name)) return null
+      }
       fail()
     }
     if (!result.data || result.data.size > MAX_FILE_BYTES) fail()
