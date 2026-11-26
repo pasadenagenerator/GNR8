@@ -68,6 +68,36 @@ function makeHtmlResponse(html: string): Response {
   });
 }
 
+test("url import fetches independent source assets with bounded concurrency", async () => {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-asset-concurrency-"));
+  const sourceUrl = "https://example.com/";
+  let inFlight = 0;
+  let peak = 0;
+  try {
+    const snapshot = await importPublicSinglePageUrlToSnapshot({
+      sourceUrl,
+      snapshotRootDirAbs: root,
+      requestId: "asset-concurrency",
+      renderedCaptureWorkerClient: unsupportedWorkerClient(),
+      fetchImpl: async (input) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url === sourceUrl) {
+          return makeHtmlResponse(`<!doctype html><html><body><main><h1>Assets</h1>${Array.from({ length: 6 }, (_, index) => `<img src="/image-${index}.png">`).join("")}</main></body></html>`);
+        }
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        inFlight -= 1;
+        return new Response(new Uint8Array([137, 80, 78, 71]), { headers: { "content-type": "image/png" } });
+      },
+    });
+    assert.equal(peak, 4);
+    assert.equal(snapshot.fetchManifest.filter((entry) => entry.fetchStatus === "fetched" && entry.assetKind === "image").length, 6);
+  } finally {
+    await fs.promises.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("url import removes a MIME-proven false stylesheet role without losing the image", async () => {
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-css-role-"));
   const sourceUrl = "https://example.com/";

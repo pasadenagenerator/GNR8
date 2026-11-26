@@ -4966,6 +4966,8 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       messageLabel: "Direct asset fetch" | "Stylesheet-linked asset fetch",
       attempt = 0,
     ): Promise<FetchOutcome> {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ADDITIONAL_PAGE_ASSET_TIMEOUT_MS);
       const htmlImageRefs = htmlImageRefByUrl.get(resolvedUrl) ?? [];
       for (const ref of htmlImageRefs) {
         const entry = imageAssetDiscoveryEntries.get(ref.key);
@@ -4987,6 +4989,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           init: {
           method: "GET",
           cache: "no-store",
+          signal: controller.signal,
           headers: {
             accept: "text/css,text/javascript,application/javascript,image/*,*/*;q=0.8",
             "accept-encoding": "identity",
@@ -5066,7 +5069,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           byteLength: bytes.byteLength,
         };
       } catch (error) {
-        if (attempt === 0) return fetchAndStoreAsset(resolvedUrl, localPath, messageLabel, 1);
+        if (attempt === 0 && !controller.signal.aborted) return fetchAndStoreAsset(resolvedUrl, localPath, messageLabel, 1);
         if (htmlImageRefs.length > 0) {
           for (const ref of htmlImageRefs) {
             const entry = imageAssetDiscoveryEntries.get(ref.key);
@@ -5108,15 +5111,21 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           contentType: null,
           byteLength: null,
         };
+      } finally {
+        clearTimeout(timer);
       }
     }
 
-    for (const resolvedUrl of uniqueUrls) {
-      const localPath = localPathByUrl.get(resolvedUrl);
-      if (!localPath) continue;
-      const outcome = await fetchAndStoreAsset(resolvedUrl, localPath, "Direct asset fetch");
-      fetchOutcomeByUrl.set(resolvedUrl, outcome);
-    }
+    let nextAssetIndex = 0;
+    await Promise.all(Array.from({ length: Math.min(ADDITIONAL_PAGE_ASSET_CONCURRENCY, uniqueUrls.length) }, async () => {
+      while (nextAssetIndex < uniqueUrls.length) {
+        const resolvedUrl = uniqueUrls[nextAssetIndex++];
+        const localPath = localPathByUrl.get(resolvedUrl);
+        if (!localPath) continue;
+        const outcome = await fetchAndStoreAsset(resolvedUrl, localPath, "Direct asset fetch");
+        fetchOutcomeByUrl.set(resolvedUrl, outcome);
+      }
+    }));
 
     const selectedPrimaryStylesheetUrl = selectedPrimaryHeadStylesheetRef?.resolvedUrl ?? null;
     let selectedPrimaryStylesheetLocalPath: string | null = null;
