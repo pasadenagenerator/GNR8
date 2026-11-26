@@ -613,6 +613,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
           siteVersionId: preallocatedIdentity.siteVersionId, importAttemptId,
         }) : null
     const restoredSnapshot = checkpoint ? await checkpoint.load(importUrl.toString()) : null
+    let checkpointReady = Boolean(restoredSnapshot)
     const snapshot = restoredSnapshot ?? await importPublicSinglePageUrlToSnapshot({
       sourceUrl: importUrl.toString(),
       requestId: `client-site-import-${Date.now()}`,
@@ -624,6 +625,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
     } else if (checkpoint && snapshot.importIntake?.ok) {
       try {
         await checkpoint.save(snapshot)
+        checkpointReady = true
         diagnostics.push('SITE_IMPORT_SEED_CHECKPOINT_SAVED')
       } catch (error) {
         if (error instanceof Error && error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT') throw error
@@ -749,7 +751,14 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         siteVersionId: preallocatedIdentity.siteVersionId,
       },
       multiPageDiscovery: body.multiPageDiscovery,
-      pageCheckpoint: checkpoint,
+      pageCheckpoint: checkpointReady && checkpoint && !restoredSnapshot ? {
+        loadHtmlPage: async () => null,
+        saveHtmlPage: (url, page) => checkpoint.saveHtmlPage(url, page),
+      } : checkpointReady ? checkpoint : null,
+      assetCheckpoint: checkpointReady && checkpoint && !restoredSnapshot ? {
+        loadAsset: async () => null,
+        saveAsset: (url, asset) => checkpoint.saveAsset(url, asset),
+      } : checkpointReady ? checkpoint : null,
     })
     console.info('[site-import] SCOPED_IMPORT_PIPELINE_COMPLETED', {
       siteVersionId: imported.siteVersionId,

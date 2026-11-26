@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import type { RenderedCaptureWorkerClient } from "@/gnr8/import-rendered-capture-worker";
+import type { CachedImportHtmlPage } from "@/gnr8/site/url-import-seed-checkpoint";
 import { parseRenderedCaptureWorkerRequestDetailed } from "@/gnr8/import-rendered-capture-worker/worker-service";
 import {
   captureAssetsForAdditionalHtmlPages,
@@ -205,6 +206,37 @@ test("child asset budget counts new transfers, not assets already retained by th
     assert.equal(result.pages[0]?.fetchedAssetCount, newUrls.length + 1);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("child asset capture reuses verified bytes on a later import attempt", async () => {
+  const roots = [0, 1].map(() => fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-asset-resume-")));
+  const assetUrl = "https://example.com/logo.png";
+  const saved = new Map<string, CachedImportHtmlPage>();
+  const assetCheckpoint = {
+    loadAsset: async (url: string) => saved.get(url) ?? null,
+    saveAsset: async (url: string, asset: CachedImportHtmlPage) => { saved.set(url, asset); },
+  };
+  let sourceRequests = 0;
+  try {
+    for (const root of roots) {
+      const result = await captureAssetsForAdditionalHtmlPages({
+        snapshotRootDirAbs: root,
+        pages: [{ pageUrl: "https://example.com/about", bodyPath: path.join(root, "about.html"),
+          html: `<img src="${assetUrl}">` }],
+        assetCheckpoint,
+        fetchImpl: async () => {
+          sourceRequests += 1;
+          return new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/png" } });
+        },
+      });
+      assert.equal(result.summary.failedRequiredAssetCount, 0);
+      assert.equal(result.summary.fetchedAssetCount, 1);
+    }
+    assert.equal(sourceRequests, 1);
+    assert.deepEqual(saved.get(assetUrl)?.bytes, Buffer.from([1, 2, 3]));
+  } finally {
+    roots.forEach((root) => fs.rmSync(root, { recursive: true, force: true }));
   }
 });
 

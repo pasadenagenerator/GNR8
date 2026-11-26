@@ -1487,6 +1487,7 @@ async function acquireScopedMultiPageHtml(input: {
   verifyCssUsage?: boolean
   approvedUnusedCssDependencies?: string[]
   pageCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadHtmlPage' | 'saveHtmlPage'> | null
+  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> | null
 }): Promise<{ summary: MultiPageHtmlAcquisitionSummary; manifest: MultiPageHtmlAcquisitionManifest | null }> {
   if (!input.option.acquireHtml) return { summary: disabledHtmlAcquisitionSummary(), manifest: null }
 
@@ -1858,6 +1859,7 @@ async function acquireScopedMultiPageHtml(input: {
         pages: fetchedAssetPages,
         snapshotRootDirAbs: input.snapshot.snapshotRootDirAbs,
         existingFetchManifest: input.snapshot.fetchManifest,
+        assetCheckpoint: input.assetCheckpoint,
         ...(input.verifyCssUsage ? {
           fullHtmlDocumentsForCssUsage: [
             fs.readFileSync(input.snapshot.entryHtmlPathAbs, 'utf8'),
@@ -2138,6 +2140,7 @@ async function buildScopedMultiPageDiscovery(input: {
   approvedUnusedCssDependencies?: string[]
   requireCompleteCapture?: boolean
   pageCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadHtmlPage' | 'saveHtmlPage'> | null
+  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> | null
 }): Promise<{
   summary: MultiPageDiscoverySummary
   manifest: MultiPageDiscoveryManifest | null
@@ -2639,6 +2642,7 @@ async function buildScopedMultiPageDiscovery(input: {
     verifyCssUsage: input.verifyCssUsage,
     approvedUnusedCssDependencies: input.approvedUnusedCssDependencies,
     pageCheckpoint: input.pageCheckpoint,
+    assetCheckpoint: input.assetCheckpoint,
   })
   discoveryResult.summary.discoveredPageCount = manifest.discoveredPages.length
   discoveryResult.summary.routeCandidateCount = manifest.routeCandidates.length
@@ -3806,6 +3810,7 @@ export async function runScopedImportPipeline(input: {
   }
   multiPageDiscovery?: ScopedMultiPageDiscoveryOption
   pageCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadHtmlPage' | 'saveHtmlPage'> | null
+  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> | null
   deps?: Partial<ScopedImportPipelineDependencies>
 }): Promise<ScopedImportPipelineOutcome> {
   if (
@@ -3918,6 +3923,7 @@ export async function runScopedImportPipeline(input: {
     verifyCssUsage: gitArchiveRequired && gitArchiveSelected,
     requireCompleteCapture: gitArchiveRequired && gitArchiveSelected,
     pageCheckpoint: input.pageCheckpoint,
+    assetCheckpoint: input.assetCheckpoint,
     approvedUnusedCssDependencies: [
       ...approvedUnusedCssDependencies(input.sourceUrl, input.ownershipScope?.siteId),
       ...input.snapshot.fetchManifest

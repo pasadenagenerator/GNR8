@@ -71,6 +71,10 @@ test('seed capture is restored from private storage for the same import identity
       finalUrl: pageUrl, status: 200, redirected: false,
       contentType: 'text/html', bytes: Buffer.from('<main>Changed</main>'),
     }), /URL_IMPORT_CHECKPOINT_CONFLICT/)
+    const assetUrl = 'https://example.com/logo.png'
+    await checkpoint.saveAsset(assetUrl, { finalUrl: assetUrl, status: 200,
+      redirected: false, contentType: 'image/png', bytes: Buffer.from([1, 2, 3]) })
+    assert.deepEqual((await checkpoint.loadAsset(assetUrl))?.bytes, Buffer.from([1, 2, 3]))
     assert.equal(await checkpoint.load('https://different.example.com/').then(() => false).catch(() => true), true)
     const imageObject = [...objects].find(([key, body]) => key.includes('/files/') && body.equals(Buffer.from([1, 2, 3])))
     assert.ok(imageObject)

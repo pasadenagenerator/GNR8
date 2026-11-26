@@ -4,6 +4,7 @@ import https from "node:https";
 import path from "node:path";
 
 import { parse, parseFragment, serialize } from "parse5";
+import type { UrlImportSeedCheckpoint } from "../../site/url-import-seed-checkpoint";
 import { findProvablyUnusedCssDependencies } from "../../output-adapters/source-backed-css-dependency-analysis";
 
 import type { RenderedCaptureExecutor, RenderedCaptureResult } from "../../import-rendered-capture";
@@ -117,6 +118,7 @@ export type UrlImportDiagnosticCode =
   | "ASSET_REFERENCE_UNSUPPORTED"
   | "ASSET_URL_PARSE_FAILED"
   | "ASSET_FETCH_FAILED"
+  | "MULTIPAGE_ASSET_CHECKPOINT_UNAVAILABLE"
   | "ASSET_FETCH_NON_OK"
   | "RAW_IMPORT_HTML_IMAGE_CANDIDATE_FOUND"
   | "RAW_IMPORT_HTML_IMAGE_CANDIDATE_RESOLVED"
@@ -2881,6 +2883,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   approvedUnusedStylesheetDependencyUrls?: string[];
   /** Exact script URLs acquired as inert bytes for reviewed-hash validation. */
   retainedScriptDependencyUrls?: string[];
+  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> | null;
   fetchImpl?: FetchLike;
 }): Promise<AdditionalHtmlPageAssetCaptureResult> {
   const fetcher = input.fetchImpl ?? fetch;
@@ -3083,7 +3086,12 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ADDITIONAL_PAGE_ASSET_TIMEOUT_MS);
     try {
-      const { response, bytes } = await fetchAssetBytesWithNodeFallback({
+      const cached = await input.assetCheckpoint?.loadAsset(resolvedUrl);
+      const { response, bytes } = cached ? {
+        response: { ok: true, status: cached.status, url: cached.finalUrl,
+          headers: new Headers(cached.contentType ? { 'content-type': cached.contentType } : {}) },
+        bytes: cached.bytes,
+      } : await fetchAssetBytesWithNodeFallback({
         url: resolvedUrl,
         pageUrl,
         fetcher,
@@ -3132,6 +3140,18 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         failedRequiredResources.add(resolvedUrl);
         return;
       }
+      if (!cached && input.assetCheckpoint) {
+        try {
+          await input.assetCheckpoint.saveAsset(resolvedUrl, {
+            finalUrl, status: response.status, redirected: finalUrl !== resolvedUrl,
+            contentType, bytes: Buffer.from(bytes),
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT') throw error;
+          diagnostics.push(createDiagnostic({ severity: 'warning', code: 'MULTIPAGE_ASSET_CHECKPOINT_UNAVAILABLE',
+            message: 'A fetched asset could not be cached for retry.', targetUrl: null, details: {} }));
+        }
+      }
       const absPath = path.resolve(input.snapshotRootDirAbs, localPath);
       const rootWithSeparator = `${path.resolve(input.snapshotRootDirAbs)}${path.sep}`;
       if (!absPath.startsWith(rootWithSeparator)) {
@@ -3148,7 +3168,8 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         byteLength: bytes.byteLength,
       });
       failedRequiredResources.delete(resolvedUrl);
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT') throw error;
       if (attempt === 0) {
         await fetchOne(resolvedUrl, assetKind, pageUrl, 1);
         return;

@@ -90,26 +90,26 @@ export class UrlImportSeedCheckpoint {
     if (!existing.equals(body)) throw new Error('URL_IMPORT_CHECKPOINT_CONFLICT')
   }
 
-  private pageKey(url: string): string {
+  private responseKey(kind: 'pages' | 'assets', url: string): string {
     if (!/^https?:\/\//.test(url) || url.length > 2048) fail()
-    return `${this.prefix}/pages/${hash(Buffer.from(url))}`
+    return `${this.prefix}/${kind}/${hash(Buffer.from(url))}`
   }
 
-  async saveHtmlPage(url: string, page: CachedImportHtmlPage): Promise<void> {
+  private async saveResponse(kind: 'pages' | 'assets', url: string, page: CachedImportHtmlPage): Promise<void> {
     if (!/^https?:\/\//.test(page.finalUrl) || page.finalUrl.length > 2048 ||
       !Number.isInteger(page.status) || page.status < 200 || page.status >= 300 ||
       page.bytes.length > 16 * 1024 * 1024 || (page.contentType?.length ?? 0) > 256) fail()
-    const header = Buffer.from(JSON.stringify({ kind: 'url_import_html_page_v1', url,
+    const header = Buffer.from(JSON.stringify({ kind: `url_import_${kind}_v1`, url,
       finalUrl: page.finalUrl, status: page.status, redirected: page.redirected,
       contentType: page.contentType, bytes: page.bytes.length, sha256: hash(page.bytes) }))
     if (header.length > 8_192) fail()
     const prefix = Buffer.alloc(4)
     prefix.writeUInt32BE(header.length)
-    await this.writeImmutable(this.pageKey(url), Buffer.concat([prefix, header, page.bytes]))
+    await this.writeImmutable(this.responseKey(kind, url), Buffer.concat([prefix, header, page.bytes]))
   }
 
-  async loadHtmlPage(url: string): Promise<CachedImportHtmlPage | null> {
-    const body = await this.read(this.pageKey(url))
+  private async loadResponse(kind: 'pages' | 'assets', url: string): Promise<CachedImportHtmlPage | null> {
+    const body = await this.read(this.responseKey(kind, url))
     if (!body) return null
     if (body.length < 4) fail()
     const headerLength = body.readUInt32BE(0)
@@ -117,7 +117,7 @@ export class UrlImportSeedCheckpoint {
     let header: Record<string, unknown>
     try { header = JSON.parse(body.subarray(4, 4 + headerLength).toString('utf8')) } catch { fail() }
     const bytes = body.subarray(4 + headerLength)
-    if (header.kind !== 'url_import_html_page_v1' || header.url !== url ||
+    if (header.kind !== `url_import_${kind}_v1` || header.url !== url ||
       typeof header.finalUrl !== 'string' || !/^https?:\/\//.test(header.finalUrl) ||
       header.finalUrl.length > 2048 || typeof header.status !== 'number' || !Number.isInteger(header.status) ||
       (header.status as number) < 200 || (header.status as number) >= 300 ||
@@ -126,6 +126,22 @@ export class UrlImportSeedCheckpoint {
       header.bytes !== bytes.length || header.sha256 !== hash(bytes)) fail()
     return { finalUrl: header.finalUrl, status: header.status as number,
       redirected: header.redirected, contentType: header.contentType, bytes } as CachedImportHtmlPage
+  }
+
+  saveHtmlPage(url: string, page: CachedImportHtmlPage): Promise<void> {
+    return this.saveResponse('pages', url, page)
+  }
+
+  loadHtmlPage(url: string): Promise<CachedImportHtmlPage | null> {
+    return this.loadResponse('pages', url)
+  }
+
+  saveAsset(url: string, asset: CachedImportHtmlPage): Promise<void> {
+    return this.saveResponse('assets', url, asset)
+  }
+
+  loadAsset(url: string): Promise<CachedImportHtmlPage | null> {
+    return this.loadResponse('assets', url)
   }
 
   async save(snapshot: UrlSinglePageImportSnapshot): Promise<void> {
