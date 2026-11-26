@@ -1,5 +1,6 @@
 import 'server-only';
 import type { NativeStudioScope } from './native-studio-binding-store';
+import { exactStudioInternalOverride } from './native-studio-access-internal-route';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const HEX32 = /^[a-f0-9]{32}$/;
@@ -74,8 +75,10 @@ export async function inspectCloudflareStudioAccessApp(
     destinations.every((destination: unknown) => object(destination) &&
       typeof destination.uri === 'string' &&
       (destination.type === undefined || destination.type === 'public') &&
-      (destination.overrides === undefined ||
-        Array.isArray(destination.overrides) && destination.overrides.length === 0)) &&
+      (expectedProtection === 'studio-and-preview' && destination.uri === path.uri ?
+        exactStudioInternalOverride(destination.overrides) :
+        destination.overrides === undefined ||
+          Array.isArray(destination.overrides) && destination.overrides.length === 0)) &&
     destinations.map((destination: Record<string, unknown>) => (destination.uri as string).replace(/\/$/, '')).sort()
       .join('\n') === [...expectedUris].sort().join('\n');
   const legacy = app.self_hosted_domains;

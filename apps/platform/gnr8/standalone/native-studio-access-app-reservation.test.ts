@@ -19,8 +19,9 @@ const domain = 'site.app.pasadenagenerator.com/studio';
 const previewDomain = 'preview.site.app.pasadenagenerator.com';
 const previewOrigin = `https://${previewDomain}`;
 const name = `gnr8-${scope.siteId}-studio-access`;
-const app = { id: appId, name, type: 'self_hosted', domain,
-  destinations: [{ type: 'public', uri: domain },
+const app = { id: appId, name, type: 'self_hosted', domain, aud: 'c'.repeat(64),
+  destinations: [{ type: 'public', uri: domain,
+    overrides: [{ behavior: 'public', path_pattern: '/studio/internal/*' }] },
     { type: 'public', uri: previewDomain }] };
 const client = {} as SupabaseClient;
 
@@ -36,6 +37,8 @@ function fixture(options: { created?: boolean; lostAfterCreate?: boolean;
   let created = options.created ?? false;
   let canCreate = !options.noCreate;
   let posts = 0;
+  let puts = 0;
+  let currentApp = app;
   let current = target;
   const store = { read: async (key: string) => saved.get(key) ?? null,
     claim: async (key: string, value: unknown) => {
@@ -44,9 +47,11 @@ function fixture(options: { created?: boolean; lostAfterCreate?: boolean;
     } };
   const deps = {
     target: async () => current,
-    inventory: async (kind: string) => inventory(kind === 'accounts' && created ? [app] :
-      kind === 'zones' && options.zoneMirrorsAccount && created ? [app] :
-      kind === 'zones' && options.zoneOverlap ? [{ ...app, id: 'd'.repeat(32) }] : []),
+    inventory: async (kind: string) => inventory(kind === 'accounts' && created ? [currentApp] :
+      kind === 'zones' && options.zoneMirrorsAccount && created ? [currentApp] :
+      kind === 'zones' && options.zoneOverlap ? [{ ...app, id: 'd'.repeat(32),
+        destinations: [{ type: 'public', uri: domain },
+          { type: 'public', uri: previewDomain }] }] : []),
     overlap: inspectNativeStudioAccessApplicationInventory,
     app: async () => ({ state: 'observed-access-app' as const,
       appId, siteId: scope.siteId, studioOrigin: target.studioOrigin,
@@ -54,6 +59,16 @@ function fixture(options: { created?: boolean; lostAfterCreate?: boolean;
       protection: 'studio-and-preview' as const, previewOrigin }),
   };
   const transport = (async (url: string, init: RequestInit) => {
+    if (url.endsWith(`/access/apps/${appId}`)) {
+      if (init.method === 'GET') return Response.json({ success: true, result: currentApp });
+      assert.equal(init.method, 'PUT');
+      const body = JSON.parse(String(init.body));
+      assert.deepEqual(body, { type: 'self_hosted', name, domain,
+        destinations: app.destinations });
+      puts++;
+      currentApp = app;
+      return Response.json({ success: true, result: currentApp });
+    }
     if (init.method === 'POST') {
       posts++;
       assert.equal(url, `https://api.cloudflare.com/client/v4/accounts/${accountId}/access/apps`);
@@ -72,6 +87,8 @@ function fixture(options: { created?: boolean; lostAfterCreate?: boolean;
   }) as typeof fetch;
   const input = { scope, client, accountId, zoneId, credential, store: store as any };
   return { input, transport, deps, saved, posts: () => posts,
+    puts: () => puts,
+    setApp: (value: typeof app) => { currentApp = value; },
     enableCreate: () => { canCreate = true; },
     setTarget: (value: typeof target) => { current = value; } };
 }
@@ -85,6 +102,19 @@ test('creates a default-deny app once and re-verifies its bound receipt', async 
   assert.equal(f.saved.size, 2);
   assert.deepEqual(await reserveNativeStudioAccessApp(f.input, f.transport, f.deps as any), first);
   assert.equal(f.posts(), 1);
+});
+
+test('repairs one previously bound app without repeating the PUT', async () => {
+  const f = fixture();
+  await reserveNativeStudioAccessApp(f.input, f.transport, f.deps as any);
+  f.setApp({ ...app, destinations: [{ type: 'public', uri: domain } as any,
+    { type: 'public', uri: previewDomain }] });
+  assert.equal((await reserveNativeStudioAccessApp(f.input, f.transport,
+    f.deps as any)).state, 'access-app-bound');
+  assert.equal(f.puts(), 1);
+  assert.equal((await reserveNativeStudioAccessApp(f.input, f.transport,
+    f.deps as any)).state, 'access-app-bound');
+  assert.equal(f.puts(), 1);
 });
 
 test('reconciles a lost response and permits one guarded URI repair', async () => {

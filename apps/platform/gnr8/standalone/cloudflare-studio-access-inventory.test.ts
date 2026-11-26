@@ -8,7 +8,9 @@ const foreignId = '22222222-2222-4222-8222-222222222222';
 const current = { id: currentId, type: 'self_hosted', domain: `${host}/studio`,
   destinations: [{ type: 'public', uri: `${host}/studio` }] };
 const previewHost = `preview.${host}`;
-const dual = { ...current, destinations: [...current.destinations,
+const internalOverride = { behavior: 'public', path_pattern: '/studio/internal/*' };
+const dual = { ...current, destinations: [{ ...current.destinations[0],
+  overrides: [internalOverride] },
   { type: 'public', uri: previewHost }],
   self_hosted_domains: [`${host}/studio`, previewHost] };
 
@@ -28,7 +30,7 @@ test('accepts the sole exact app alongside unrelated Access applications', () =>
       applicationsChecked: 3 });
 });
 
-test('dual-host inventory rejects overrides on either protected domain', () => {
+test('dual-host inventory permits only the exact internal Worker path override', () => {
   const exact = inventory([dual, { id: foreignId, type: 'self_hosted',
     domain: 'other.example.com/studio' }]);
   assert.deepEqual(inspectNativeStudioAccessApplicationInventory(exact,
@@ -47,6 +49,13 @@ test('dual-host inventory rejects overrides on either protected domain', () => {
   assert.throws(() => inspectNativeStudioAccessApplicationInventory(
     inventory([current]), currentId, host, previewHost),
   /native_studio_access_inventory_unverified_current_app/);
+  assert.throws(() => inspectNativeStudioAccessApplicationInventory(
+    inventory([{ ...dual, destinations: current.destinations.concat(dual.destinations[1]) }]),
+    currentId, host, previewHost), /native_studio_access_inventory_unverified_current_app/);
+  assert.throws(() => inspectNativeStudioAccessApplicationInventory(
+    inventory([{ ...dual, destinations: [{ ...dual.destinations[0], overrides: [
+      { behavior: 'public', path_pattern: '/studio/*' }] }, dual.destinations[1]] }]),
+    currentId, host, previewHost), /native_studio_access_inventory_unverified/);
   assert.throws(() => inspectNativeStudioAccessApplicationInventory(
     inventory([dual, { ...dual, id: foreignId }]), currentId, host, previewHost),
   /native_studio_access_inventory_unverified/);

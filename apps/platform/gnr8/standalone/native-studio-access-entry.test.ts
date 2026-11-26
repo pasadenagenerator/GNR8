@@ -83,9 +83,12 @@ test('accepts the bound app mirrored in zone inventory but rejects another overl
   const f = fixture();
   const host = new URL(studioOrigin).hostname;
   const current = { id: appId, type: 'self_hosted', domain: `${host}/studio`,
+    destinations: [{ type: 'public', uri: `${host}/studio`, overrides: [
+      { behavior: 'public', path_pattern: '/studio/internal/*' }] },
+      { type: 'public', uri: `preview.${host}` }] };
+  const foreign = { ...current, id: '66666666-6666-4666-8666-666666666666',
     destinations: [{ type: 'public', uri: `${host}/studio` },
       { type: 'public', uri: `preview.${host}` }] };
-  const foreign = { ...current, id: '66666666-6666-4666-8666-666666666666' };
   let zoneApps = [current];
   const deps = { ...f.deps,
     inventoryRead: async (kind: string) => {

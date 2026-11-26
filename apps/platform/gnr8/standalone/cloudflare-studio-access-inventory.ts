@@ -3,6 +3,7 @@
  * Cloudflare path precedence: a more specific app replaces inherited rules.
  * https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/
  */
+import { exactStudioInternalOverride } from './native-studio-access-internal-route';
 const APP_ID = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
 const HOST = /^(?:[a-z0-9*](?:[a-z0-9*-]*[a-z0-9*])?\.)+[a-z]{2,}$/;
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -27,7 +28,7 @@ function routeFromUri(value: unknown): Route {
   return routeFromDomain(value);
 }
 
-function applicationRoutes(app: Record<string, unknown>): Route[] {
+function applicationRoutes(app: Record<string, unknown>, internalOverrideUri?: string): Route[] {
   const routes: Route[] = [];
   if (app.domain !== undefined) routes.push(routeFromDomain(app.domain));
   let legacy: Route[] | null = null;
@@ -41,7 +42,9 @@ function applicationRoutes(app: Record<string, unknown>): Route[] {
     for (const item of app.destinations) {
       if (!object(item) || (item.type !== undefined && item.type !== 'public') ||
           (item.overrides !== undefined &&
-            (!Array.isArray(item.overrides) || item.overrides.length))) fail();
+            (!Array.isArray(item.overrides) || item.overrides.length > 0 &&
+              !(item.uri === internalOverrideUri &&
+                exactStudioInternalOverride(item.overrides))))) fail();
       destinations.push(routeFromUri(item.uri));
     }
   }
@@ -100,7 +103,13 @@ export function inspectNativeStudioAccessApplicationInventory(
         typeof item.type !== 'string') fail();
     if (item.id === currentAppId) {
       current++;
-      const routes = applicationRoutes(item);
+      const routes = applicationRoutes(item,
+        previewHost === undefined ? undefined : `${studioHost}/studio`);
+      if (previewHost !== undefined &&
+          (!Array.isArray(item.destinations) ||
+            !item.destinations.some((destination: unknown) => object(destination) &&
+              destination.uri === `${studioHost}/studio` &&
+              exactStudioInternalOverride(destination.overrides)))) fail('current_app');
       if (item.type !== 'self_hosted' ||
           (previewHost === undefined ? routes.some(route =>
             route.host !== studioHost || route.path !== '/studio') :

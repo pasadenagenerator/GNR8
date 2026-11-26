@@ -7,6 +7,8 @@ import { readNativeStudioBootstrapTarget } from './native-studio-configured-reso
 import { readCompleteCloudflareAccessAppInventory } from './cloudflare-studio-access-inventory-readback';
 import { inspectNativeStudioAccessApplicationInventory } from './cloudflare-studio-access-inventory';
 import { inspectCloudflareStudioAccessApp } from './cloudflare-studio-access-app';
+import { STUDIO_INTERNAL_ACCESS_OVERRIDE } from './native-studio-access-internal-route';
+import { exactStudioInternalOverride } from './native-studio-access-internal-route';
 
 const HEX32 = /^[a-f0-9]{32}$/;
 const APP_ID = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
@@ -14,6 +16,7 @@ const TOKEN = /^[A-Za-z0-9_-]{16,256}$/;
 export const ACCESS_APP_V2_INTENT = 'native-studio/access-app-create-intent-v2.json';
 export const ACCESS_APP_V2_BOUND = 'native-studio/access-app-bound-v2.json';
 const URI_REPAIR_INTENT = 'native-studio/access-app-public-uri-repair-v1.json';
+const INTERNAL_OVERRIDE_INTENT = 'native-studio/access-app-internal-override-v1.json';
 const LEGACY_INTENT = 'native-studio/access-app-create-intent-v1.json';
 const LEGACY_BOUND = 'native-studio/access-app-bound-v1.json';
 const FORMAT = 'gnr8-native-studio-access-app:v2';
@@ -119,6 +122,61 @@ export async function reserveNativeStudioAccessApp(input: {
       priorBound.protection !== PROTECTION || priorBound.previewOrigin !== previewOrigin))
     throw Error('native_studio_access_app_reservation_binding_conflict');
 
+  // Upgrade only a previously bound app. A lost PUT response is reconciled by
+  // readback on the next run; an ambiguous write is never repeated blindly.
+  if (priorBound) {
+    const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/access/apps/${priorBound.appId}`;
+    let app: Record<string, unknown>;
+    try {
+      const response = await transport(url, { method: 'GET', redirect: 'error',
+        signal: AbortSignal.timeout(30_000),
+        headers: { authorization: `Bearer ${credential}`, accept: 'application/json' } });
+      const body: unknown = await response.json();
+      if (!response.ok || !object(body) || body.success !== true || !object(body.result))
+        throw Error();
+      app = body.result;
+    } catch { throw Error('native_studio_access_app_override_read_failed'); }
+    const destinations = app.destinations;
+    const exact = Array.isArray(destinations) && destinations.length === 2 &&
+      destinations.every(value => object(value) && value.type === 'public' &&
+        (value.uri === domain || value.uri === previewDomain) &&
+        Object.keys(value).every(key => ['type', 'uri', 'overrides'].includes(key))) &&
+      destinations.some(value => value.uri === domain) &&
+      destinations.some(value => value.uri === previewDomain) &&
+      destinations.every(value => value.uri === domain || value.overrides === undefined ||
+        Array.isArray(value.overrides) && value.overrides.length === 0);
+    if (app.id !== priorBound.appId || app.type !== 'self_hosted' ||
+        app.name !== name || app.domain !== domain || app.aud !== priorBound.aud ||
+        !exact)
+      throw Error('native_studio_access_app_override_unverified');
+    const studioDestination = destinations.find(value => value.uri === domain);
+    if (!studioDestination || !(studioDestination.overrides === undefined ||
+        Array.isArray(studioDestination.overrides) && studioDestination.overrides.length === 0 ||
+        exactStudioInternalOverride(studioDestination.overrides)))
+      throw Error('native_studio_access_app_override_unverified');
+    const overrideIntent = { identity, appId: priorBound.appId,
+      pathPattern: STUDIO_INTERNAL_ACCESS_OVERRIDE.path_pattern };
+    const priorOverrideIntent = await store.read(INTERNAL_OVERRIDE_INTENT);
+    if (priorOverrideIntent && !same(priorOverrideIntent, overrideIntent))
+      throw Error('native_studio_access_app_override_intent_conflict');
+    if (!exactStudioInternalOverride(studioDestination.overrides)) {
+      if (priorOverrideIntent || !await store.claim(INTERNAL_OVERRIDE_INTENT, overrideIntent))
+        throw Error('native_studio_access_app_override_pending');
+      const updatedDestinations = destinations.map(value => value.uri === domain ?
+        { type: 'public', uri: domain,
+          overrides: [STUDIO_INTERNAL_ACCESS_OVERRIDE] } : value);
+      try {
+        await transport(url, { method: 'PUT', redirect: 'error',
+          signal: AbortSignal.timeout(30_000),
+          headers: { authorization: `Bearer ${credential}`, accept: 'application/json',
+            'content-type': 'application/json' },
+          body: JSON.stringify({ type: 'self_hosted', name, domain,
+            destinations: updatedDestinations }),
+        });
+      } catch { /* Reconcile the write through the existing inventory readback. */ }
+    }
+  }
+
   async function inventories(stage: 'before' | 'after') {
     async function read(kind: 'accounts' | 'zones', id: string) {
       try { return await deps.inventory(kind, id, credential, transport); }
@@ -188,7 +246,8 @@ export async function reserveNativeStudioAccessApp(input: {
         headers: { authorization: `Bearer ${credential}`, accept: 'application/json',
           'content-type': 'application/json' },
         body: JSON.stringify({ type: 'self_hosted', name, domain,
-          destinations: [{ type: 'public', uri: domain },
+          destinations: [{ type: 'public', uri: domain,
+            overrides: [STUDIO_INTERNAL_ACCESS_OVERRIDE] },
             { type: 'public', uri: previewDomain }] }),
       });
     } catch { /* A lost response can follow a successful create. Read back. */ }

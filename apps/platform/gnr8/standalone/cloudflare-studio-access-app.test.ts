@@ -15,6 +15,7 @@ const app = { id: appId, type: 'self_hosted',
   destinations: [{ type: 'public', uri: 'site.app.pasadenagenerator.com/studio' }] };
 const organization = { auth_domain: 'gnr8.cloudflareaccess.com' };
 const previewOrigin = 'https://preview.site.app.pasadenagenerator.com';
+const internalOverride = { behavior: 'public', path_pattern: '/studio/internal/*' };
 
 function fixture(application: unknown = app, org: unknown = organization) {
   const calls: Array<{ url: string; init: RequestInit }> = [];
@@ -44,7 +45,8 @@ test('observes one exact self-hosted Studio route without policy or login claims
 });
 
 test('dual-host readback requires exactly the editor and whole preview destinations', async () => {
-  const dual = { ...app, destinations: [app.destinations[0],
+  const dual = { ...app, destinations: [{ ...app.destinations[0],
+    overrides: [internalOverride] },
     { type: 'public', uri: 'preview.site.app.pasadenagenerator.com' }],
     self_hosted_domains: [app.destinations[0].uri, 'preview.site.app.pasadenagenerator.com'] };
   assert.deepEqual(await inspectCloudflareStudioAccessApp(scope, site, appId,
@@ -56,6 +58,9 @@ test('dual-host readback requires exactly the editor and whole preview destinati
   });
   for (const changed of [
     app,
+    { ...dual, destinations: [app.destinations[0], dual.destinations[1]] },
+    { ...dual, destinations: [{ ...app.destinations[0], overrides: [
+      { behavior: 'public', path_pattern: '/studio/*' }] }, dual.destinations[1]] },
     { ...dual, destinations: [dual.destinations[0],
       { type: 'public', uri: 'preview.site.app.pasadenagenerator.com/studio' }] },
     { ...dual, self_hosted_domains: [app.destinations[0].uri, 'site.app.pasadenagenerator.com'] },
