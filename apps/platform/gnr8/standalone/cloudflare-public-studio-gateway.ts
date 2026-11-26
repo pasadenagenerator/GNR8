@@ -5,6 +5,7 @@ import { readNativeStudioBootstrapTarget } from './native-studio-configured-reso
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
+const DOMAIN_ID = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
 const TOKEN = /^[A-Za-z0-9_-]{40,80}$/;
 const DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/;
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -136,7 +137,7 @@ export async function inspectCloudflarePublicStudioGateway(
   if (domains.length !== 1 || !object(domains[0]) ||
       domains[0].hostname !== domain || domains[0].service !== worker ||
       domains[0].enabled !== true || domains[0].previews_enabled !== false ||
-      typeof domains[0].id !== 'string' || !HEX32.test(domains[0].id))
+      typeof domains[0].id !== 'string' || !DOMAIN_ID.test(domains[0].id))
     throw Error('native_studio_public_gateway_domain_conflict');
   return { state: 'observed-control-plane' as const, worker, workerId,
     deploymentId: active.id as string, versionId, domainId: domains[0].id as string };

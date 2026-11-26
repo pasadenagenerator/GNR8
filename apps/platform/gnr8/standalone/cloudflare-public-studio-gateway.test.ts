@@ -13,6 +13,7 @@ const credential = 'c'.repeat(40), domain = 'site.app.pasadenagenerator.com';
 const worker = `gnr8-${scope.siteId}-site`, studio = `gnr8-${scope.siteId}-studio`;
 const deploymentId = '44444444-4444-4444-8444-444444444444';
 const versionId = '55555555-5555-4555-8555-555555555555';
+const domainId = '66666666-6666-4666-8666-666666666666';
 const publicTag = `gnr8-public-first-${'f'.repeat(64)}`;
 
 function fixture() {
@@ -31,7 +32,7 @@ function fixture() {
     } },
     [`/workers/workers/${worker}/versions/${versionId}`]: {
       id: versionId, annotations: { 'workers/tag': publicTag } },
-    '/workers/domains': [{ id: 'd'.repeat(32), hostname: domain,
+    '/workers/domains': [{ id: domainId, hostname: domain,
       service: worker, enabled: true, previews_enabled: false }],
   };
   const transport = (async (url: string, options: RequestInit) => {
@@ -55,9 +56,12 @@ test('checks the active public Worker, exact Studio binding and routed domain', 
   assert.deepEqual(await inspectCloudflarePublicStudioGateway(scope, accountId,
     workerId, domain, credential, f.transport), {
     state: 'observed-control-plane', worker, workerId, deploymentId, versionId,
-    domainId: 'd'.repeat(32),
+    domainId,
   });
   assert.equal(f.calls.length, 4);
+  (f.result['/workers/domains'] as { id: string }[])[0].id = 'd'.repeat(32);
+  assert.equal((await inspectCloudflarePublicStudioGateway(scope, accountId,
+    workerId, domain, credential, f.transport)).domainId, 'd'.repeat(32));
 });
 
 test('active public version must carry the exact first-deploy tag', async () => {
