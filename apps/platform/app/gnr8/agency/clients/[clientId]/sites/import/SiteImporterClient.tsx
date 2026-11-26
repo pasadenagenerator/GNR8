@@ -115,23 +115,37 @@ export default function SiteImporterClient(props: Props) {
 
     try {
       setIsSubmitting(true)
+      const requestPayload = buildSiteImportRequestPayload({
+        url: normalizedUrl,
+        workingDomain: selectedWorkingDomain,
+        siteName,
+        agencyId: props.agencyId,
+        adminView: props.adminView ?? false,
+        multiPageImportEnabled,
+        multiPageLimits,
+      })
+      const attemptStorageKey = `gnr8-site-import-attempt:${props.agencyId}:${props.clientId}`
+      const fingerprint = JSON.stringify(requestPayload)
+      let previousAttempt: { fingerprint: string; id: string } | null = null
+      try {
+        previousAttempt = JSON.parse(sessionStorage.getItem(attemptStorageKey) ?? 'null')
+      } catch {
+        // A malformed browser record is replaced by a fresh attempt.
+      }
+      const importAttemptId = previousAttempt?.fingerprint === fingerprint &&
+        /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(previousAttempt.id)
+        ? previousAttempt.id : crypto.randomUUID()
+      try {
+        sessionStorage.setItem(attemptStorageKey, JSON.stringify({ fingerprint, id: importAttemptId }))
+      } catch {
+        // Browser storage is optional; the current request can still run.
+      }
       const response = await fetch(
         `/api/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/sites/import`,
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(
-            buildSiteImportRequestPayload({
-              url: normalizedUrl,
-              workingDomain: selectedWorkingDomain,
-              importAttemptId: crypto.randomUUID(),
-              siteName,
-              agencyId: props.agencyId,
-              adminView: props.adminView ?? false,
-              multiPageImportEnabled,
-              multiPageLimits,
-            }),
-          ),
+          body: JSON.stringify({ ...requestPayload, importAttemptId }),
         },
       )
       const payload = (await response.json().catch(() => null)) as ImportResponse | null
@@ -151,6 +165,8 @@ export default function SiteImporterClient(props: Props) {
         setError(`Import failed (HTTP ${response.status})`)
         return
       }
+
+      try { sessionStorage.removeItem(attemptStorageKey) } catch { /* Optional browser storage. */ }
 
       setStatusText(
         siteImportSuccessStatusText({
