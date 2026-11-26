@@ -78,6 +78,7 @@ deps = defaults) {
         input.client, prepared.site.accountId, prepared.workerId,
         credential, transport, tag, true,
         { store: prepared.store, sourceId: prepared.sourceId,
+          commit: prepared.commit,
           site: prepared.site }),
     });
   }, env, transport);

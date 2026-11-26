@@ -144,6 +144,31 @@ test('corroborates an omitted exports map through the active namespace', async (
     accountId, workerId, domain, credential, f.transport)).state, 'pending');
 });
 
+test('accepts the observed default-policy Container only with the exact saved image', async () => {
+  const f = fixture();
+  const namespaceId = '9'.repeat(32);
+  const image = `registry.cloudflare.com/${accountId}/gnr8-${scope.siteId}-studio@sha256:${'a'.repeat(64)}`;
+  const version = f.result[`/workers/scripts/${worker}/versions/${versionId}`] as {
+    resources: { script_runtime: { exports?: unknown }; bindings: {
+      name: string; namespace_id?: string }[] } };
+  delete version.resources.script_runtime.exports;
+  version.resources.bindings.find(binding => binding.name === 'PREVIEW')!
+    .namespace_id = namespaceId;
+  f.result['/containers/applications'] = [{ id: 'container-app-id', name: 'generated-name',
+    account_id: accountId, scheduling_policy: 'default',
+    durable_objects: { namespace_id: namespaceId }, configuration: { image } }];
+  assert.equal((await inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag,
+    expectedRepository, true, undefined, image)).state, 'verified-source-control-plane');
+  await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag,
+    expectedRepository, true, undefined,
+    image.replace(/a{64}$/, 'b'.repeat(64))), /container_conflict/);
+  await assert.rejects(inspectCloudflareStudioFirstDeployment(scope,
+    accountId, workerId, domain, credential, f.transport, expectedTag,
+    expectedRepository, true), /container_conflict/);
+});
+
 test('corroborates the exact first deploy tag on the actively serving version', async () => {
   const f = fixture();
   assert.deepEqual(await inspectCloudflareStudioFirstDeployment(scope,
@@ -268,7 +293,7 @@ test('hosted inspection compares Worker repository with the current site binding
   await assert.rejects(inspectBoundCloudflareStudioFirstDeployment(scope, client,
     accountId, workerId, credential, f.transport, undefined, false, {
       store: { read: async () => null, getBytes: async () => Buffer.alloc(0) } as any,
-      sourceId: 'a'.repeat(64),
+      sourceId: 'a'.repeat(64), commit: 'b'.repeat(40),
       site: { siteId: scope.siteId, accountId, studioOrigin: `https://${domain}`,
         repository: 'foreign/site', repositoryId: '2' } as any,
     }), /source_unverified/);

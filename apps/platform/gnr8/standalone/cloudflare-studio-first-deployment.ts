@@ -8,6 +8,8 @@ import type { configuredNativeStudioBootstrapSite } from './native-studio-bootst
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const HEX32 = /^[a-f0-9]{32}$/;
+const SHA = /^[a-f0-9]{64}$/;
+const COMMIT = /^[a-f0-9]{40,64}$/;
 const TOKEN = /^[A-Za-z0-9_-]{40,80}$/;
 const FIRST_DEPLOY_TAG = /^gnr8-first-[a-f0-9]{64}$/;
 const SECRET_NAMES = ['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
@@ -17,7 +19,8 @@ const object = (value: unknown): value is Record<string, unknown> =>
 type AccessBinding = { version: 2; provider: 'access'; aud: string;
   teamDomain: string; admins: string[] };
 type SourceProof = { store: Pick<PublicationStore, 'read' | 'getBytes'>;
-  sourceId: string; site: Awaited<ReturnType<typeof configuredNativeStudioBootstrapSite>> };
+  sourceId: string; commit: string;
+  site: Awaited<ReturnType<typeof configuredNativeStudioBootstrapSite>> };
 
 /** Read only control-plane evidence for the first real Studio deployment.
  * A reserved Worker alone is pending, not an installed or ready Studio.
@@ -33,6 +36,7 @@ export async function inspectCloudflareStudioFirstDeployment(
   expectedRepository?: string,
   requireSecrets = false,
   expectedAccess?: AccessBinding,
+  expectedImage?: string,
 ) {
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)) ||
@@ -40,6 +44,9 @@ export async function inspectCloudflareStudioFirstDeployment(
       (expectedTag !== undefined && !FIRST_DEPLOY_TAG.test(expectedTag)) ||
       (expectedRepository !== undefined &&
         !/^[A-Za-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{0,62}$/.test(expectedRepository)) ||
+      (expectedImage !== undefined &&
+        !new RegExp(`^registry\\.cloudflare\\.com/${accountId}/gnr8-${scope.siteId}-studio@sha256:[a-f0-9]{64}$`)
+          .test(expectedImage)) ||
       (expectedAccess !== undefined && (expectedAccess.version !== 2 ||
         expectedAccess.provider !== 'access' ||
         !/^[a-f0-9]{64}$/.test(expectedAccess.aud) ||
@@ -187,7 +194,10 @@ export async function inspectCloudflareStudioFirstDeployment(
       (container ? matching[0].name !== container :
         typeof matching[0].name !== 'string' || !matching[0].name) ||
       matching[0].account_id !== accountId ||
-      matching[0].scheduling_policy !== 'durable_object' ||
+      !['default', 'durable_object'].includes(String(matching[0].scheduling_policy)) ||
+      (matching[0].scheduling_policy === 'default' &&
+        (!expectedImage || !object(matching[0].configuration) ||
+          matching[0].configuration.image !== expectedImage)) ||
       (namespaceId !== undefined && (!object(matching[0].durable_objects) ||
         matching[0].durable_objects.namespace_id !== namespaceId)) ||
       typeof matching[0].id !== 'string' || !matching[0].id)
@@ -226,11 +236,13 @@ export async function inspectBoundCloudflareStudioFirstDeployment(
   if (site.error || !site.data || typeof site.data.domain !== 'string' || !repository)
     throw Error('native_studio_first_deployment_scope_unverified');
   let expectedAccess: AccessBinding | undefined;
+  let expectedImage: string | undefined;
   if (sourceProof !== undefined) {
     if (!sourceProof || !sourceProof.store ||
         typeof sourceProof.store.read !== 'function' ||
         typeof sourceProof.store.getBytes !== 'function' ||
         sourceProof.site?.siteId !== scope.siteId ||
+        !SHA.test(sourceProof.sourceId) || !COMMIT.test(sourceProof.commit) ||
         sourceProof.site.accountId !== accountId ||
         sourceProof.site.studioOrigin !== `https://${site.data.domain}` ||
         sourceProof.site.repository !== `${repository.owner}/${repository.repository}` ||
@@ -241,8 +253,20 @@ export async function inspectBoundCloudflareStudioFirstDeployment(
     catch { throw Error('native_studio_first_deployment_source_unverified'); }
     expectedAccess = saved.receipt.format === 'gnr8-native-studio-source:v2'
       ? saved.receipt.access as AccessBinding : undefined;
+    let prebuilt: unknown;
+    try { prebuilt = await sourceProof.store.read('native-studio/prebuilt-image-v1.json'); }
+    catch { throw Error('native_studio_first_deployment_source_unverified'); }
+    if (!object(prebuilt) || Object.keys(prebuilt).sort().join() !==
+        'accountId,commit,digest,siteId,sourceId,workerId' ||
+        prebuilt.accountId !== accountId || prebuilt.siteId !== scope.siteId ||
+        prebuilt.sourceId !== sourceProof.sourceId ||
+        prebuilt.commit !== sourceProof.commit || prebuilt.workerId !== workerId ||
+        typeof prebuilt.digest !== 'string' || !SHA.test(prebuilt.digest))
+      throw Error('native_studio_first_deployment_source_unverified');
+    expectedImage = `registry.cloudflare.com/${accountId}/gnr8-${scope.siteId}-studio@sha256:${prebuilt.digest}`;
   }
   return inspectCloudflareStudioFirstDeployment(scope, accountId, workerId,
     site.data.domain, credential, transport, expectedTag,
-    `${repository.owner}/${repository.repository}`, requireSecrets, expectedAccess);
+    `${repository.owner}/${repository.repository}`, requireSecrets, expectedAccess,
+    expectedImage);
 }

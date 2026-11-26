@@ -33,6 +33,6 @@ export async function configuredFirstStudioDeployIntent(input: {
         scope, client, env, transport),
       inspectCloudflare: () => inspectBoundCloudflareStudioFirstDeployment(
         scope, client, site.accountId, workerId, cloudflareCredential, transport,
-        undefined, false, { store, sourceId, site }),
+        undefined, false, { store, sourceId, commit, site }),
     });
 }
