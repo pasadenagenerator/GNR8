@@ -12,6 +12,20 @@ export { STACKI_RELEASE_PIN };
 const pin = STACKI_RELEASE_PIN;
 const json = value => JSON.stringify(value, null, 2) + '\n';
 const sha = value => createHash('sha256').update(value).digest('hex');
+const cloudflareWorkerEntry = `// GNR8 Cloudflare adapter. Stacki's original Worker and auth provider remain untouched.
+// Workers reject fetch({ redirect: 'error' }); 'manual' also refuses to follow a
+// redirect, and Stacki's bounded fetch rejects the returned non-2xx response.
+import worker from '../src/cloudflare/worker';
+export { PreviewContainer } from '../src/cloudflare/worker';
+
+const cloudflareFetch = globalThis.fetch.bind(globalThis);
+globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+  cloudflareFetch(input, init?.redirect === 'error'
+    ? { ...init, redirect: 'manual' }
+    : init)) as typeof fetch;
+
+export default worker;
+`;
 const fail = message => { throw new Error(message); };
 const stat = path => lstat(path).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
 
@@ -51,13 +65,22 @@ export function configuration(input, accessInput) {
   const site = binding(input);
   const access = accessBinding(accessInput);
   const name = `gnr8-${site.siteId}`;
-  const previewOrigin = `https://preview.${new URL(site.studioOrigin).hostname}`;
+  const domain = new URL(site.studioOrigin).hostname;
+  const zoneId = process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID;
+  const zone = zoneId && /^[a-f0-9]{32}$/.test(zoneId)
+    ? { zone_id: zoneId }
+    : { zone_name: domain.split('.').slice(-2).join('.') };
+  const previewOrigin = `https://preview.${domain}`;
   const common = { compatibility_date: '2026-10-16', workers_dev: false, preview_urls: false, observability: { enabled: false } };
   const files = new Map([
     ['studio/cloudflare/wrangler.jsonc', json({
       $schema: '../node_modules/wrangler/config-schema.json', ...common,
-      account_id: site.accountId, name: `${name}-studio`, main: '../src/cloudflare/worker.ts', compatibility_flags: ['nodejs_compat'],
-      routes: [{ pattern: new URL(previewOrigin).hostname, custom_domain: true }], limits: { cpu_ms: 50 },
+      account_id: site.accountId, name: `${name}-studio`,
+      main: access ? './gnr8-worker-entry.ts' : '../src/cloudflare/worker.ts',
+      compatibility_flags: ['nodejs_compat'],
+      routes: [{ pattern: new URL(previewOrigin).hostname, custom_domain: true },
+        ...(access ? [{ pattern: `${domain}/studio`, ...zone },
+          { pattern: `${domain}/studio/*`, ...zone }] : [])], limits: { cpu_ms: 50 },
       assets: { directory: '../dist', binding: 'ASSETS', run_worker_first: true },
       containers: [{ class_name: 'PreviewContainer', image: '../Dockerfile', max_instances: 1, instance_type: 'standard-2' }],
       durable_objects: { bindings: [{ name: 'PREVIEW', class_name: 'PreviewContainer' }] },
@@ -73,6 +96,7 @@ export function configuration(input, accessInput) {
           EDITOR_ACCESS: 'roles', EDITOR_GITHUB_IDS: '' } :
           { EDITOR_ACCESS: 'repository', EDITOR_GITHUB_IDS: '' }) },
     })],
+    ...(access ? [['studio/cloudflare/gnr8-worker-entry.ts', cloudflareWorkerEntry]] : []),
     ['wrangler.json', json({ ...common, account_id: site.accountId,
       name: `${name}-site`, main: './studio/src/cloudflare/site.ts',
       routes: [{ pattern: new URL(site.studioOrigin).hostname, custom_domain: true }],

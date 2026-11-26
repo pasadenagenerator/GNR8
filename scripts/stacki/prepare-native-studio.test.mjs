@@ -60,13 +60,34 @@ test('Access v2 adds exact native auth and roles without changing legacy files',
   const configured = configuration(site, access);
   assert.deepEqual(configuration(site, undefined), legacy);
   assert.deepEqual(configured.site, legacy.site);
-  assert.deepEqual([...configured.files.keys()], [...legacy.files.keys(), '.stacki/roles.json']);
+  assert.deepEqual([...configured.files.keys()], [
+    'studio/cloudflare/wrangler.jsonc', 'studio/cloudflare/gnr8-worker-entry.ts',
+    ...[...legacy.files.keys()].filter(path => path !== 'studio/cloudflare/wrangler.jsonc'),
+    '.stacki/roles.json']);
   for (const [path, content] of legacy.files) {
     if (path !== 'studio/cloudflare/wrangler.jsonc')
       assert.equal(configured.files.get(path), content);
   }
   assert.equal(legacy.files.has('.stacki/roles.json'), false);
   const vars = JSON.parse(configured.files.get('studio/cloudflare/wrangler.jsonc')).vars;
+  assert.equal(JSON.parse(configured.files.get('studio/cloudflare/wrangler.jsonc')).main,
+    './gnr8-worker-entry.ts');
+  const routes = JSON.parse(configured.files.get('studio/cloudflare/wrangler.jsonc')).routes;
+  assert.deepEqual(routes, [
+    { pattern: 'preview.one.example.com', custom_domain: true },
+    { pattern: 'one.example.com/studio', zone_name: 'example.com' },
+    { pattern: 'one.example.com/studio/*', zone_name: 'example.com' },
+  ]);
+  const previousZone = process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID;
+  try {
+    process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID = '7'.repeat(32);
+    const hostedRoutes = JSON.parse(configuration(site, access).files.get('studio/cloudflare/wrangler.jsonc')).routes;
+    assert.equal(hostedRoutes[1].zone_id, '7'.repeat(32));
+    assert.equal(hostedRoutes[2].zone_id, '7'.repeat(32));
+  } finally {
+    if (previousZone === undefined) delete process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID;
+    else process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID = previousZone;
+  }
   assert.deepEqual({ provider: vars.AUTH_PROVIDER, access: vars.EDITOR_ACCESS,
     teamDomain: vars.ACCESS_TEAM_DOMAIN, aud: vars.ACCESS_AUD,
     bootstrapAdmin: vars.AUTH_BOOTSTRAP_ADMIN }, {

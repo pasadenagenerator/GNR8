@@ -129,7 +129,7 @@ export async function preparePrebundledStudioDeployConfig(input) {
   } catch { fail(); }
   if (config.account_id !== site.accountId ||
       config.name !== `gnr8-${site.siteId}-studio` ||
-      config.main !== '../src/cloudflare/worker.ts' ||
+      !['../src/cloudflare/worker.ts', './gnr8-worker-entry.ts'].includes(config.main) ||
       config.assets?.directory !== '../dist' ||
       !Array.isArray(config.containers) || config.containers.length !== 1 ||
       config.containers[0]?.class_name !== 'PreviewContainer' ||

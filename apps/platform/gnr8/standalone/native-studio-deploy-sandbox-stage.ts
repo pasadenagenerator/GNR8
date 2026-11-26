@@ -95,7 +95,7 @@ async function localFiles(input: Input) {
       'build' in config || 'rules' in config || 'site' in config ||
       original.account_id !== input.accountId ||
       original.name !== `gnr8-${input.siteId}-studio` ||
-      original.main !== '../src/cloudflare/worker.ts' ||
+      !['../src/cloudflare/worker.ts', './gnr8-worker-entry.ts'].includes(original.main) ||
       original.assets?.directory !== '../dist' ||
       !Array.isArray(original.containers) || original.containers.length !== 1 ||
       original.containers[0]?.image !== '../Dockerfile' ||

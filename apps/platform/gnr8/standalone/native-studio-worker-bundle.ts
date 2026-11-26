@@ -20,7 +20,11 @@ type BundleConfig = { outdir: string; metafile: string; receipt: string;
 const STUDIO: BundleConfig = { outdir: NATIVE_STUDIO_WORKER_BUNDLE_OUTDIR,
   metafile: NATIVE_STUDIO_WORKER_BUNDLE_METAFILE,
   receipt: NATIVE_STUDIO_WORKER_BUNDLE_RECEIPT,
-  entryPoints: ['src/cloudflare/worker.ts',
+  entryPoints: ['cloudflare/gnr8-worker-entry.ts',
+    '../cloudflare/gnr8-worker-entry.ts',
+    'studio/cloudflare/gnr8-worker-entry.ts',
+    '/vercel/sandbox/gnr8-image-source/studio/cloudflare/gnr8-worker-entry.ts',
+    'src/cloudflare/worker.ts',
     '../src/cloudflare/worker.ts',
     'studio/src/cloudflare/worker.ts',
     '/vercel/sandbox/gnr8-image-source/studio/src/cloudflare/worker.ts'] };
