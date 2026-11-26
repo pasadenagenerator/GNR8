@@ -104,7 +104,11 @@ async function observe(input: Input, credential: string, tag: string): Promise<R
         result.workerId === input.publicWorkerId ?
         'first-open-required' : 'pending-review',
       commit: input.commit, observation: result.state };
-  } catch {
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : '';
+    if (/^native_studio_public_gateway_(?:worker|version|source|binding|domain)_conflict$/.test(reason))
+      return { state: 'pending-review', commit: input.commit,
+        observation: reason };
     return { state: 'pending-review', commit: input.commit,
       observation: 'readback-unavailable' };
   }
@@ -212,6 +216,8 @@ export async function advanceNativeStudioDetachedPublicDeploy(input: Input,
         try { await sandbox.stop(); } catch { /* Exact readback is authoritative. */ }
         return result;
       }
+      if (result.state === 'pending-review' &&
+          result.observation?.endsWith('_conflict')) return result;
       return { state: 'running', commit: input.commit };
     }
     const result = await observe(input, credential, tag);

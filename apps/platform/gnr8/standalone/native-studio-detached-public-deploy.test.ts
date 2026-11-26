@@ -26,6 +26,7 @@ test('stages verified public package then deploys once and observes tag', async 
   const calls: string[] = [];
   let exit: number | null = null;
   let observed = false;
+  let conflict = false;
   const store = { read: async (key: string) => records.get(key) ?? null,
     claim: async (key: string, value: unknown) => {
       if (records.has(key)) return false;
@@ -63,9 +64,12 @@ test('stages verified public package then deploys once and observes tag', async 
     prepareIntent: async () => { records.set('native-studio/first-public-deploy-intent-v1.json',
       expectedAttempt); return { state: 'prepared', commit,
       publicWorkerId, studioTag }; },
-    inspect: async () => observed
-      ? { state: 'observed-control-plane', workerId: publicWorkerId }
-      : { state: 'pending' },
+    inspect: async () => {
+      if (conflict) throw Error('native_studio_public_gateway_domain_conflict');
+      return observed
+        ? { state: 'observed-control-plane', workerId: publicWorkerId }
+        : { state: 'pending' };
+    },
   };
   assert.equal((await advanceNativeStudioDetachedPublicDeploy(input as any,
     sdk as any, steps as any)).state, 'running');
@@ -73,6 +77,11 @@ test('stages verified public package then deploys once and observes tag', async 
     sdk as any, steps as any)).state, 'running');
   assert.equal((await advanceNativeStudioDetachedPublicDeploy(input as any,
     sdk as any, steps as any)).state, 'running');
+  conflict = true;
+  assert.deepEqual(await advanceNativeStudioDetachedPublicDeploy(input as any,
+    sdk as any, steps as any), { state: 'pending-review', commit,
+    observation: 'native_studio_public_gateway_domain_conflict' });
+  conflict = false;
   observed = true;
   assert.deepEqual(await advanceNativeStudioDetachedPublicDeploy(input as any,
     sdk as any, steps as any), { state: 'first-open-required', commit,
