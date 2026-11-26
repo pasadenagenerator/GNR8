@@ -21,7 +21,7 @@ test('seed capture is restored from private storage for the same import identity
         const body = objects.get(key)
         return body
           ? { data: new Blob([new Uint8Array(body)]), error: null }
-          : { data: null, error: { statusCode: '404' } }
+          : { data: null, error: { status: 404, statusCode: 'NoSuchKey', message: 'Object not found' } }
       },
     }),
   }

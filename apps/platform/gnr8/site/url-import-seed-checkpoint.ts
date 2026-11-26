@@ -37,9 +37,12 @@ function safeRelativePath(value: string): boolean {
     !value.startsWith('/') && value.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..')
 }
 function isMissing(error: unknown): boolean {
-  const status = String((error as { statusCode?: unknown } | null)?.statusCode ?? '')
-  return status === '404' || status === '400' &&
-    /not found|NoSuchKey/i.test(String((error as { message?: unknown } | null)?.message ?? ''))
+  const storageError = error as { status?: unknown; statusCode?: unknown; message?: unknown } | null
+  const status = String(storageError?.status ?? '')
+  const code = String(storageError?.statusCode ?? '')
+  const message = String(storageError?.message ?? '')
+  return status === '404' || code === '404' || code === 'NoSuchKey' ||
+    (status === '400' || code === '400') && /not found|NoSuchKey/i.test(message)
 }
 
 /** Immutable seed capture, scoped to one agency/client/version/attempt. */
