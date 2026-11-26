@@ -58,6 +58,19 @@ test('seed capture is restored from private storage for the same import identity
     assert.equal(restored.sourceSelection.selectedSourceHtmlPathAbs, restored.entryHtmlPathAbs)
     assert.deepEqual(fs.readFileSync(path.join(restored.snapshotRootDirAbs, 'assets', 'logo.png')), Buffer.from([1, 2, 3]))
     assert.match(fs.readFileSync(restored.entryHtmlPathAbs, 'utf8'), /logo\.png/)
+    const pageUrl = 'https://example.com/about'
+    await checkpoint.saveHtmlPage(pageUrl, {
+      finalUrl: pageUrl, status: 200, redirected: false,
+      contentType: 'text/html', bytes: Buffer.from('<main>About</main>'),
+    })
+    assert.deepEqual(await checkpoint.loadHtmlPage(pageUrl), {
+      finalUrl: pageUrl, status: 200, redirected: false,
+      contentType: 'text/html', bytes: Buffer.from('<main>About</main>'),
+    })
+    await assert.rejects(checkpoint.saveHtmlPage(pageUrl, {
+      finalUrl: pageUrl, status: 200, redirected: false,
+      contentType: 'text/html', bytes: Buffer.from('<main>Changed</main>'),
+    }), /URL_IMPORT_CHECKPOINT_CONFLICT/)
     assert.equal(await checkpoint.load('https://different.example.com/').then(() => false).catch(() => true), true)
     const imageObject = [...objects].find(([key, body]) => key.includes('/files/') && body.equals(Buffer.from([1, 2, 3])))
     assert.ok(imageObject)

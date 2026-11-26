@@ -1407,6 +1407,7 @@ test('scoped pipeline import can persist seed-only multi-page discovery manifest
 
 test('scoped pipeline multi-page HTML acquisition fetches child evidence without public serving changes', async () => {
   const aboutHtml = '<!doctype html><html><body><h1>About</h1><a href="/article">Article</a></body></html>'
+  let articleRequests = 0
   const server = http.createServer((req, res) => {
     const url = req.url ?? '/'
     if (url === '/about') {
@@ -1415,6 +1416,7 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
       return
     }
     if (url === '/article') {
+      articleRequests += 1
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
       res.end('<!doctype html><html><body><h1>Article</h1></body></html>')
       return
@@ -1474,6 +1476,10 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
     let artifactInput: any = null
     let rawImportFilePaths: string[] = []
     let linkedArtifactId: string | null = null
+    const savedPages = new Map<string, { finalUrl: string; status: number; redirected: boolean; contentType: string | null; bytes: Buffer }>()
+    savedPages.set(`${sourceUrl}article`, { finalUrl: `${sourceUrl}article`, status: 200,
+      redirected: false, contentType: 'text/html; charset=utf-8',
+      bytes: Buffer.from('<!doctype html><html><body><h1>Article</h1></body></html>') })
 
     const outcome = await runScopedImportPipeline({
       snapshot: {
@@ -1524,6 +1530,10 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
       } as any,
       sourceUrl,
       actor: 'test:multi-page-acquisition',
+      pageCheckpoint: {
+        loadHtmlPage: async (url) => savedPages.get(url) ?? null,
+        saveHtmlPage: async (url, page) => { savedPages.set(url, page) },
+      },
       multiPageDiscovery: {
         enabled: true,
         acquireHtml: true,
@@ -1597,6 +1607,10 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.enabled, true)
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.fetchedPageCount, 3)
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.failedPageCount, 1)
+    assert.equal(savedPages.get(`${sourceUrl}about`)?.bytes.toString('utf8'), aboutHtml)
+    assert.equal(savedPages.has(`${sourceUrl}broken`), false)
+    assert.equal(savedPages.has(`${sourceUrl}data`), false)
+    assert.equal(articleRequests, 0)
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.manifestRef, 'importProvenanceSummary.multiPageDiscovery.acquisition')
     assert.ok(outcome.reporting.multiPageDiscovery.htmlAcquisition?.skippedPageCount ?? 0 >= 4)
     assert.equal(outcome.reporting.multiPageDiscovery.rawArtifactAssembly, undefined)

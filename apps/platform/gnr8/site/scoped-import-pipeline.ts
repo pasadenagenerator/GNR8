@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import type { UrlImportSeedCheckpoint } from './url-import-seed-checkpoint'
 
 import { parse } from 'parse5'
 import { createImportManifest } from '@/gnr8/import/import-manifest'
@@ -1430,7 +1431,7 @@ async function readResponseBytesWithLimit(response: Response, maxBytes: number):
 }
 
 async function fetchHtmlPageWithTimeout(url: string, timeoutMs: number, maxBytes: number): Promise<{
-  response: Response
+  response: Pick<Response, 'url' | 'status' | 'redirected' | 'headers'>
   bytes: Buffer
   truncated: boolean
 }> {
@@ -1485,6 +1486,7 @@ async function acquireScopedMultiPageHtml(input: {
   robotsEvidence?: Parameters<typeof applyRobotsRouteGovernance>[0]
   verifyCssUsage?: boolean
   approvedUnusedCssDependencies?: string[]
+  pageCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadHtmlPage' | 'saveHtmlPage'> | null
 }): Promise<{ summary: MultiPageHtmlAcquisitionSummary; manifest: MultiPageHtmlAcquisitionManifest | null }> {
   if (!input.option.acquireHtml) return { summary: disabledHtmlAcquisitionSummary(), manifest: null }
 
@@ -1538,7 +1540,18 @@ async function acquireScopedMultiPageHtml(input: {
   )
 
   const maxPages = input.option.htmlAcquisitionLimits.maxPages
-  const pending = new Map<number, Promise<{ page: Awaited<ReturnType<typeof fetchHtmlPageWithTimeout>> | null; error: unknown }>>()
+  const loadOrFetchPage = async (url: string) => {
+    const cached = await input.pageCheckpoint?.loadHtmlPage(url)
+    if (cached && cached.bytes.length <= input.option.htmlAcquisitionLimits.maxBytesPerPage) return {
+      response: { url: cached.finalUrl, status: cached.status, redirected: cached.redirected,
+        headers: new Headers(cached.contentType ? { 'content-type': cached.contentType } : {}) },
+      bytes: cached.bytes, truncated: false, fromCheckpoint: true,
+    }
+    return { ...await fetchHtmlPageWithTimeout(url,
+      input.option.htmlAcquisitionLimits.requestTimeoutMs,
+      input.option.htmlAcquisitionLimits.maxBytesPerPage), fromCheckpoint: false }
+  }
+  const pending = new Map<number, Promise<{ page: Awaited<ReturnType<typeof loadOrFetchPage>> | null; error: unknown }>>()
   let nextPrefetchIndex = 0
   const prefetchPages = (candidateIndex: number) => {
     const end = Math.min(candidates.length, maxPages, candidateIndex + 4)
@@ -1551,11 +1564,8 @@ async function acquireScopedMultiPageHtml(input: {
         seedUrl: normalizedSeed.url,
         evidenceUrls: [candidate.absoluteUrl, candidate.normalizedUrl],
       }).accepted) continue
-      pending.set(index, fetchHtmlPageWithTimeout(
-        url,
-        input.option.htmlAcquisitionLimits.requestTimeoutMs,
-        input.option.htmlAcquisitionLimits.maxBytesPerPage,
-      ).then(page => ({ page, error: null }), error => ({ page: null, error })))
+      pending.set(index, loadOrFetchPage(url)
+        .then(page => ({ page, error: null }), error => ({ page: null, error })))
     }
   }
 
@@ -1611,11 +1621,8 @@ async function acquireScopedMultiPageHtml(input: {
       pending.delete(candidateIndex)
       const fetched = prefetched
         ? await prefetched
-        : await fetchHtmlPageWithTimeout(
-            normalizedUrl,
-            input.option.htmlAcquisitionLimits.requestTimeoutMs,
-            input.option.htmlAcquisitionLimits.maxBytesPerPage,
-          ).then(page => ({ page, error: null }), error => ({ page: null, error }))
+        : await loadOrFetchPage(normalizedUrl)
+          .then(page => ({ page, error: null }), error => ({ page: null, error }))
       if (fetched.error) throw fetched.error
       if (!fetched.page) throw new Error('MULTIPAGE_HTML_FETCH_MISSING')
       const { response, bytes, truncated } = fetched.page
@@ -1725,6 +1732,17 @@ async function acquireScopedMultiPageHtml(input: {
           failureReason: null,
         })
         continue
+      }
+
+      if (!fetched.page.fromCheckpoint && input.pageCheckpoint) {
+        try {
+          await input.pageCheckpoint.saveHtmlPage(normalizedUrl, {
+            finalUrl, status: response.status, redirected, contentType, bytes,
+          })
+        } catch (error) {
+          if (error instanceof Error && error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT') throw error
+          diagnostics.push('MULTIPAGE_HTML_PAGE_CHECKPOINT_UNAVAILABLE')
+        }
       }
 
       const bodySha256 = crypto.createHash('sha256').update(bytes).digest('hex')
@@ -2119,6 +2137,7 @@ async function buildScopedMultiPageDiscovery(input: {
   verifyCssUsage?: boolean
   approvedUnusedCssDependencies?: string[]
   requireCompleteCapture?: boolean
+  pageCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadHtmlPage' | 'saveHtmlPage'> | null
 }): Promise<{
   summary: MultiPageDiscoverySummary
   manifest: MultiPageDiscoveryManifest | null
@@ -2619,6 +2638,7 @@ async function buildScopedMultiPageDiscovery(input: {
     robotsEvidence: robotsDiscoveryInitial,
     verifyCssUsage: input.verifyCssUsage,
     approvedUnusedCssDependencies: input.approvedUnusedCssDependencies,
+    pageCheckpoint: input.pageCheckpoint,
   })
   discoveryResult.summary.discoveredPageCount = manifest.discoveredPages.length
   discoveryResult.summary.routeCandidateCount = manifest.routeCandidates.length
@@ -3785,6 +3805,7 @@ export async function runScopedImportPipeline(input: {
     siteVersionId: string
   }
   multiPageDiscovery?: ScopedMultiPageDiscoveryOption
+  pageCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadHtmlPage' | 'saveHtmlPage'> | null
   deps?: Partial<ScopedImportPipelineDependencies>
 }): Promise<ScopedImportPipelineOutcome> {
   if (
@@ -3896,6 +3917,7 @@ export async function runScopedImportPipeline(input: {
     snapshot: input.snapshot,
     verifyCssUsage: gitArchiveRequired && gitArchiveSelected,
     requireCompleteCapture: gitArchiveRequired && gitArchiveSelected,
+    pageCheckpoint: input.pageCheckpoint,
     approvedUnusedCssDependencies: [
       ...approvedUnusedCssDependencies(input.sourceUrl, input.ownershipScope?.siteId),
       ...input.snapshot.fetchManifest

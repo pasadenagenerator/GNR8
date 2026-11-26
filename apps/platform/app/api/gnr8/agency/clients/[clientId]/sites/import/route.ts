@@ -625,7 +625,8 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       try {
         await checkpoint.save(snapshot)
         diagnostics.push('SITE_IMPORT_SEED_CHECKPOINT_SAVED')
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT') throw error
         // A cache failure must not turn a valid source capture into a failed import.
         diagnostics.push('SITE_IMPORT_SEED_CHECKPOINT_UNAVAILABLE')
       }
@@ -748,6 +749,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         siteVersionId: preallocatedIdentity.siteVersionId,
       },
       multiPageDiscovery: body.multiPageDiscovery,
+      pageCheckpoint: checkpoint,
     })
     console.info('[site-import] SCOPED_IMPORT_PIPELINE_COMPLETED', {
       siteVersionId: imported.siteVersionId,
