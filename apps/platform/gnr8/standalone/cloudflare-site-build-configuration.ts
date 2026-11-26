@@ -100,6 +100,10 @@ export async function inspectCloudflareSiteBuildPublicationSeparation(target: {
   if (!Array.isArray(scripts))
     throw Error('native_studio_site_build_separation_unverified');
   const matches = scripts.filter(item => object(item) && item.id === worker);
+  // The first public deploy creates this Worker. With no script, there is no
+  // script tag to attach a push-triggered Builds configuration to yet.
+  if (matches.length === 0)
+    return { state: 'disconnected', worker, tag: '' };
   if (matches.length !== 1 || !HEX32.test(matches[0].tag as string))
     throw Error('native_studio_site_build_separation_unverified');
   const tag = matches[0].tag as string;

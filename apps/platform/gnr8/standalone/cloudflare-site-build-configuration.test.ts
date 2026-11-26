@@ -171,3 +171,19 @@ test('public cutover accepts only absent or version-only scoped Builds', async (
     credential, transport), /separation_conflict/);
   assert.equal(reads, 8);
 });
+
+test('first public cutover accepts a not-yet-created site Worker', async () => {
+  const site = { scope: target.scope, accountId: target.accountId,
+    repository: `${target.githubOwner}/${target.repository}`,
+    repositoryId: String(target.repositoryId), branch: target.branch };
+  let reads = 0;
+  const transport = (async (url: string) => {
+    reads++;
+    assert(new URL(url).pathname.endsWith('/workers/scripts'));
+    return Response.json({ success: true, result: [] });
+  }) as typeof fetch;
+  assert.deepEqual(await inspectCloudflareSiteBuildPublicationSeparation(site,
+    credential, transport), { state: 'disconnected',
+    worker: `gnr8-${target.scope.siteId}-site`, tag: '' });
+  assert.equal(reads, 1);
+});
