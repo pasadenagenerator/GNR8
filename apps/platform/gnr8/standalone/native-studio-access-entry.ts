@@ -56,12 +56,14 @@ export async function inspectBoundNativeStudioAccessEntry(input: {
     deps.inventoryRead('zones', zoneId, credential, transport),
   ]);
   const previewHost = new URL(previewOrigin).hostname;
+  const mirroredZoneAppId = zoneApps.result.some(item =>
+    object(item) && item.id === appId) ? appId : null;
   const accountInventory = deps.inventory(accountApps, appId, host, previewHost);
-  const zoneInventory = deps.inventory(zoneApps, null, host, previewHost);
+  const zoneInventory = deps.inventory(zoneApps, mirroredZoneAppId, host, previewHost);
   if (accountInventory.state !== 'observed-no-access-overlap' ||
       accountInventory.appId !== appId ||
       zoneInventory.state !== 'observed-no-access-overlap' ||
-      zoneInventory.appId !== null)
+      zoneInventory.appId !== mirroredZoneAppId)
     throw Error('native_studio_access_entry_inventory_unverified');
   let response: Response;
   try {

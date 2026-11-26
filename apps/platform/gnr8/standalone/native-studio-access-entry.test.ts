@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inspectBoundNativeStudioAccessEntry } from './native-studio-access-entry';
+import { inspectNativeStudioAccessApplicationInventory } from './cloudflare-studio-access-inventory';
 
 const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
   clientId: '22222222-2222-4222-8222-222222222222',
@@ -76,6 +77,31 @@ test('combines scoped Access app, exact current policy and login challenge', asy
     protection: 'studio-and-preview', previewOrigin,
   });
   assert.equal(f.calls.length, 1);
+});
+
+test('accepts the bound app mirrored in zone inventory but rejects another overlapping app', async () => {
+  const f = fixture();
+  const host = new URL(studioOrigin).hostname;
+  const current = { id: appId, type: 'self_hosted', domain: `${host}/studio`,
+    destinations: [{ type: 'public', uri: `${host}/studio` },
+      { type: 'public', uri: `preview.${host}` }] };
+  const foreign = { ...current, id: '66666666-6666-4666-8666-666666666666' };
+  let zoneApps = [current];
+  const deps = { ...f.deps,
+    inventoryRead: async (kind: string) => {
+      const result = kind === 'accounts' ? [current] : zoneApps;
+      return { success: true, result, result_info: { page: 1,
+        count: result.length, total_count: result.length, total_pages: 1 } };
+    },
+    inventory: inspectNativeStudioAccessApplicationInventory,
+  };
+  assert.equal((await inspectBoundNativeStudioAccessEntry({ scope, client,
+    accountId, zoneId, appId, credential }, f.transport, deps as any)).state,
+  'observed-access-entry');
+  zoneApps = [current, foreign];
+  await assert.rejects(inspectBoundNativeStudioAccessEntry({ scope, client,
+    accountId, zoneId, appId, credential }, f.transport, deps as any),
+  /native_studio_access_inventory_unverified_overlap/);
 });
 
 test('rejects a preview host that does not show its own Access challenge', async () => {
