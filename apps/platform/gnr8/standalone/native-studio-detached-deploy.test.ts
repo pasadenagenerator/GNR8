@@ -21,6 +21,7 @@ function fixture() {
   const records = new Map<string, unknown>();
   const calls: string[] = [];
   let exitCode: number | null = null, inspection = 'pending';
+  let inspectionError = '';
   let startFails = false, remoteFails = false, pollFails = false,
     getFails = false;
   let status = 'running';
@@ -75,6 +76,7 @@ function fixture() {
         { identity, commit });
       return { state: prior ? 'pending-review' : 'prepared', commit, tag }; },
     inspect: async () => { calls.push('observe');
+      if (inspectionError) throw Error(inspectionError);
       return { state: inspection, workerId }; } };
   const steps = { verifyBundle: async () => { calls.push('bundle-verified'); },
     stageLocal: async () => { calls.push('local-staged');
@@ -89,6 +91,7 @@ function fixture() {
   return { advance, calls, records, sandbox,
     completeCommand: () => { exitCode = 0; },
     inspected: (value: string) => { inspection = value; },
+    inspectionFails: (value: string) => { inspectionError = value; },
     failStart: () => { startFails = true; },
     failPoll: () => { pollFails = true; },
     failGet: () => { getFails = true; },
@@ -126,6 +129,15 @@ test('verified Cloudflare release proceeds while Wrangler process is alive', asy
     observation: 'verified-source-control-plane' });
   assert.equal(f.calls.filter(value => value === 'wrangler-start').length, 1);
   assert.equal(f.calls.filter(value => value === 'stop').length, 0);
+});
+
+test('permanent Cloudflare readback conflict is reported without polling', async () => {
+  const f = fixture();
+  await f.advance(); await f.advance();
+  f.inspectionFails('native_studio_first_deployment_binding_conflict');
+  assert.deepEqual(await f.advance(), { state: 'pending-review', commit,
+    observation: 'native_studio_first_deployment_binding_conflict' });
+  assert.equal(f.calls.filter(value => value === 'wrangler-start').length, 1);
 });
 
 test('changed remote package blocks credentials and Cloudflare attempt', async () => {

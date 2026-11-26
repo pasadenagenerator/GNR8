@@ -117,7 +117,11 @@ async function observe(input: Input, credentials: Credentials, tag: string): Pro
     return { state: result.state === 'verified-source-control-plane' &&
         result.workerId === input.workerId ? 'reconcile-required' : 'pending-review',
       commit: input.commit, observation: result.state };
-  } catch {
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    if (/^native_studio_first_deployment_[a-z_]+$/.test(code))
+      return { state: 'pending-review', commit: input.commit,
+        observation: code };
     return { state: 'pending-review', commit: input.commit,
       observation: 'readback-unavailable' };
   }
@@ -233,7 +237,8 @@ export async function advanceNativeStudioDetachedDeploy(input: Input,
       // Wrangler can keep its process alive after Cloudflare has committed the
       // tagged release. The control-plane identity is authoritative here.
       const observed = await observe(input, credentials, tag);
-      return observed.state === 'reconcile-required' ? observed :
+      return observed.state === 'reconcile-required' ||
+        /^native_studio_first_deployment_[a-z_]+$/.test(observed.observation ?? '') ? observed :
         { state: 'running', commit: input.commit };
     }
     const observed = await observe(input, credentials, tag);
