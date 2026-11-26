@@ -9,6 +9,7 @@ import test from 'node:test'
 import {
   __scopedImportPipelineTestUtils,
   materializeCmsContentSlotsForScopedImport,
+  ScopedImportContinuationRequired,
   runScopedImportPipeline,
 } from '@/gnr8/site/scoped-import-pipeline'
 import { buildRenderedHtmlHash } from '@/gnr8/architecture/evidence-capture-expansion'
@@ -1481,7 +1482,7 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
       redirected: false, contentType: 'text/html; charset=utf-8',
       bytes: Buffer.from('<!doctype html><html><body><h1>Article</h1></body></html>') })
 
-    const outcome = await runScopedImportPipeline({
+    const pipelineInput = {
       snapshot: {
         snapshotRootDirAbs: root,
         snapshotStableRootDirAbs: root,
@@ -1601,7 +1602,13 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
         importHtmlToPage: () => ({}) as any,
         migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
       },
-    })
+    } as Parameters<typeof runScopedImportPipeline>[0]
+
+    await assert.rejects(
+      runScopedImportPipeline({ ...pipelineInput, pageBatchSize: 1 }),
+      (error: unknown) => error instanceof ScopedImportContinuationRequired && error.completedPages >= 1,
+    )
+    const outcome = await runScopedImportPipeline(pipelineInput)
 
     assert.equal(outcome.mode, 'pipeline')
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.enabled, true)

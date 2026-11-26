@@ -96,8 +96,10 @@ export class UrlImportSeedCheckpoint {
   }
 
   private async saveResponse(kind: 'pages' | 'assets', url: string, page: CachedImportHtmlPage): Promise<void> {
+    const allowedStatus = page.status >= 200 && page.status < 300 ||
+      kind === 'pages' && (page.status === 404 || page.status === 410)
     if (!/^https?:\/\//.test(page.finalUrl) || page.finalUrl.length > 2048 ||
-      !Number.isInteger(page.status) || page.status < 200 || page.status >= 300 ||
+      !Number.isInteger(page.status) || !allowedStatus ||
       page.bytes.length > 16 * 1024 * 1024 || (page.contentType?.length ?? 0) > 256) fail()
     const header = Buffer.from(JSON.stringify({ kind: `url_import_${kind}_v1`, url,
       finalUrl: page.finalUrl, status: page.status, redirected: page.redirected,
@@ -117,10 +119,12 @@ export class UrlImportSeedCheckpoint {
     let header: Record<string, unknown>
     try { header = JSON.parse(body.subarray(4, 4 + headerLength).toString('utf8')) } catch { fail() }
     const bytes = body.subarray(4 + headerLength)
+    const status = header.status
+    const allowedStatus = typeof status === 'number' && (status >= 200 && status < 300 ||
+      kind === 'pages' && (status === 404 || status === 410))
     if (header.kind !== `url_import_${kind}_v1` || header.url !== url ||
       typeof header.finalUrl !== 'string' || !/^https?:\/\//.test(header.finalUrl) ||
-      header.finalUrl.length > 2048 || typeof header.status !== 'number' || !Number.isInteger(header.status) ||
-      (header.status as number) < 200 || (header.status as number) >= 300 ||
+      header.finalUrl.length > 2048 || !Number.isInteger(status) || !allowedStatus ||
       typeof header.redirected !== 'boolean' ||
       !(header.contentType === null || typeof header.contentType === 'string' && header.contentType.length <= 256) ||
       header.bytes !== bytes.length || header.sha256 !== hash(bytes)) fail()

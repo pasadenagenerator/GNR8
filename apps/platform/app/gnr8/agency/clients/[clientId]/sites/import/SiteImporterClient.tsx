@@ -47,6 +47,11 @@ type ImportResponse =
     }
   | {
       ok: false
+      continue?: boolean
+      completedPages?: number
+      discoveredPages?: number
+      completedAssets?: number
+      discoveredAssets?: number
       error?: string
       reasonCode?: string
       intake?: {
@@ -140,17 +145,36 @@ export default function SiteImporterClient(props: Props) {
       } catch {
         // Browser storage is optional; the current request can still run.
       }
-      const response = await fetch(
-        `/api/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/sites/import`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ ...requestPayload, importAttemptId }),
-        },
-      )
-      const payload = (await response.json().catch(() => null)) as ImportResponse | null
+      let response: Response | null = null
+      let payload: ImportResponse | null = null
+      let previousProgress = ''
+      let unchangedSteps = 0
+      for (let step = 0; step < 512; step += 1) {
+        response = await fetch(
+          `/api/gnr8/agency/clients/${encodeURIComponent(props.clientId)}/sites/import`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ ...requestPayload, importAttemptId }),
+          },
+        )
+        payload = (await response.json().catch(() => null)) as ImportResponse | null
+        if (response.status !== 202 || payload?.ok !== false || payload.continue !== true) break
+        const progress = payload.completedAssets !== undefined
+          ? `assets:${payload.completedAssets}` : `pages:${payload.completedPages ?? 0}`
+        unchangedSteps = progress === previousProgress ? unchangedSteps + 1 : 0
+        previousProgress = progress
+        if (unchangedSteps >= 2) break
+        setStatusText(payload.completedAssets !== undefined
+          ? `Zajetih datotek: ${payload.completedAssets} / ${payload.discoveredAssets ?? '?'}. Nadaljujem …`
+          : `Zajetih strani: ${payload.completedPages ?? 0} / ${payload.discoveredPages ?? '?'}. Nadaljujem …`)
+      }
+      if (payload?.ok === false && payload.continue === true) {
+        setError('Uvoz ni napredoval ali je dosegel omejitev nadaljevalnih korakov. Ponovi zagon z istimi podatki.')
+        return
+      }
       if (!payload) {
-        setError(`Import failed (HTTP ${response.status})`)
+        setError(`Import failed (HTTP ${response?.status ?? 'unknown'})`)
         return
       }
       if (payload.ok !== true) {
@@ -158,11 +182,11 @@ export default function SiteImporterClient(props: Props) {
         const evidenceSummary = evidence
           ? ` requested=${evidence.requestedUrl ?? 'n/a'} final=${evidence.finalUrl ?? 'n/a'} status=${evidence.httpStatus ?? 'n/a'} contentType=${evidence.contentType ?? 'n/a'} htmlBytes=${evidence.htmlByteLength ?? 0} assets=${evidence.assetCount ?? 0}`
           : ''
-        setError(`${payload.error ?? `Import failed (HTTP ${response.status})`}${payload.reasonCode ? ` [${payload.reasonCode}]` : ''}${evidenceSummary}`)
+        setError(`${payload.error ?? `Import failed (HTTP ${response?.status ?? 'unknown'})`}${payload.reasonCode ? ` [${payload.reasonCode}]` : ''}${evidenceSummary}`)
         return
       }
-      if (!response.ok) {
-        setError(`Import failed (HTTP ${response.status})`)
+      if (!response?.ok) {
+        setError(`Import failed (HTTP ${response?.status ?? 'unknown'})`)
         return
       }
 

@@ -136,19 +136,26 @@ export type ScopedMultiPageDiscoveryOption =
     }
 
 const DEFAULT_SCOPED_DISCOVERY_LIMITS: MultipageImportLimits = {
-  maxRoutes: 120,
-  maxDepth: 3,
-  maxLinksPerPage: 300,
+  maxRoutes: 1_000,
+  maxDepth: 6,
+  maxLinksPerPage: 1_000,
   maxTemplateLinksPerRoute: 25,
   maxSitemaps: 6,
-  maxUrlsFromSitemaps: 120,
+  maxUrlsFromSitemaps: 1_000,
   maxNestedSitemaps: 4,
 }
 
 const DEFAULT_SCOPED_HTML_ACQUISITION_LIMITS = {
-  maxPages: 120,
+  maxPages: 1_000,
   maxBytesPerPage: 1_000_000,
   requestTimeoutMs: 8_000,
+}
+
+export class ScopedImportContinuationRequired extends Error {
+  constructor(readonly completedPages: number, readonly discoveredPages: number) {
+    super('SITE_IMPORT_CONTINUATION_REQUIRED')
+    this.name = 'ScopedImportContinuationRequired'
+  }
 }
 
 // CHS owner approved omitting these four upstream-404 map icons on 2026-11-09.
@@ -1488,6 +1495,7 @@ async function acquireScopedMultiPageHtml(input: {
   approvedUnusedCssDependencies?: string[]
   pageCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadHtmlPage' | 'saveHtmlPage'> | null
   assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> | null
+  pageBatchSize?: number
 }): Promise<{ summary: MultiPageHtmlAcquisitionSummary; manifest: MultiPageHtmlAcquisitionManifest | null }> {
   if (!input.option.acquireHtml) return { summary: disabledHtmlAcquisitionSummary(), manifest: null }
 
@@ -1541,6 +1549,12 @@ async function acquireScopedMultiPageHtml(input: {
   )
 
   const maxPages = input.option.htmlAcquisitionLimits.maxPages
+  const maxFreshPages = input.pageCheckpoint
+    ? Math.max(1, Math.min(64, Math.floor(input.pageBatchSize ?? 16))) : Number.POSITIVE_INFINITY
+  let freshPages = 0
+  let batchFull = false
+  let batchHasRequiredFailure = false
+  let batchCheckpointFailed = false
   const loadOrFetchPage = async (url: string) => {
     const cached = await input.pageCheckpoint?.loadHtmlPage(url)
     if (cached && cached.bytes.length <= input.option.htmlAcquisitionLimits.maxBytesPerPage) return {
@@ -1555,8 +1569,9 @@ async function acquireScopedMultiPageHtml(input: {
   const pending = new Map<number, Promise<{ page: Awaited<ReturnType<typeof loadOrFetchPage>> | null; error: unknown }>>()
   let nextPrefetchIndex = 0
   const prefetchPages = (candidateIndex: number) => {
-    const end = Math.min(candidates.length, maxPages, candidateIndex + 4)
-    while (nextPrefetchIndex < end) {
+    if (batchFull) return
+    const end = Math.min(candidates.length, maxPages, candidateIndex + Math.min(4, maxFreshPages))
+    while (nextPrefetchIndex < end && freshPages + pending.size < maxFreshPages) {
       const index = nextPrefetchIndex++
       const candidate = candidates[index]
       const url = normalizeText(candidate.normalizedUrl)
@@ -1572,6 +1587,14 @@ async function acquireScopedMultiPageHtml(input: {
 
   for (const [candidateIndex, candidate] of candidates.entries()) {
     prefetchPages(candidateIndex)
+    if (batchFull && !pending.has(candidateIndex)) {
+      if (batchCheckpointFailed) throw new Error('SITE_IMPORT_PAGE_CHECKPOINT_UNAVAILABLE')
+      if (batchHasRequiredFailure) throw new Error('GITHUB_IMPORT_INCOMPLETE_CAPTURE:page_failed_or_limited')
+      throw new ScopedImportContinuationRequired(
+        pages.filter((page) => page.status === 'fetched' || [404, 410].includes(page.httpStatusCode ?? 0)).length,
+        candidates.length,
+      )
+    }
     if (candidateIndex >= input.option.htmlAcquisitionLimits.maxPages) {
       diagnostics.push('MULTIPAGE_HTML_ACQUISITION_LIMIT_REACHED')
       pages.push(
@@ -1626,6 +1649,10 @@ async function acquireScopedMultiPageHtml(input: {
           .then(page => ({ page, error: null }), error => ({ page: null, error }))
       if (fetched.error) throw fetched.error
       if (!fetched.page) throw new Error('MULTIPAGE_HTML_FETCH_MISSING')
+      if (!fetched.page.fromCheckpoint) {
+        freshPages += 1
+        if (freshPages >= maxFreshPages) batchFull = true
+      }
       const { response, bytes, truncated } = fetched.page
       const finalUrl = normalizeText(response.url) || normalizedUrl
       const finalNormalized = normalizeSeedUrl(finalUrl)
@@ -1674,6 +1701,18 @@ async function acquireScopedMultiPageHtml(input: {
       diagnostics.push(...finalCanonicalDiagnostics)
 
       if (response.status < 200 || response.status >= 300) {
+        if (![404, 410].includes(response.status)) batchHasRequiredFailure = true
+        if ([404, 410].includes(response.status) && !fetched.page.fromCheckpoint && input.pageCheckpoint) {
+          try {
+            await input.pageCheckpoint.saveHtmlPage(normalizedUrl, {
+              finalUrl, status: response.status, redirected, contentType, bytes,
+            })
+          } catch (error) {
+            if (error instanceof Error && error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT') throw error
+            batchCheckpointFailed = true
+            diagnostics.push('MULTIPAGE_HTML_PAGE_CHECKPOINT_UNAVAILABLE')
+          }
+        }
         diagnostics.push('MULTIPAGE_HTML_FETCH_FAILED')
         pages.push({
           ...common,
@@ -1689,6 +1728,7 @@ async function acquireScopedMultiPageHtml(input: {
       }
 
       if (truncated) {
+        batchHasRequiredFailure = true
         diagnostics.push('MULTIPAGE_HTML_FETCH_SKIPPED')
         pages.push({
           ...common,
@@ -1742,6 +1782,7 @@ async function acquireScopedMultiPageHtml(input: {
           })
         } catch (error) {
           if (error instanceof Error && error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT') throw error
+          batchCheckpointFailed = true
           diagnostics.push('MULTIPAGE_HTML_PAGE_CHECKPOINT_UNAVAILABLE')
         }
       }
@@ -1814,6 +1855,7 @@ async function acquireScopedMultiPageHtml(input: {
         if (refs.length > input.option.limits.maxLinksPerPage) diagnostics.push('MULTIPAGE_CHILD_LINK_LIMIT_REACHED')
       }
     } catch (error) {
+      batchHasRequiredFailure = true
       diagnostics.push('MULTIPAGE_HTML_FETCH_FAILED')
       pages.push({
         originalHref: candidate.originalHref,
@@ -1836,6 +1878,8 @@ async function acquireScopedMultiPageHtml(input: {
       })
     }
   }
+  if (batchFull && batchCheckpointFailed) throw new Error('SITE_IMPORT_PAGE_CHECKPOINT_UNAVAILABLE')
+  if (batchHasRequiredFailure && batchFull) throw new Error('GITHUB_IMPORT_INCOMPLETE_CAPTURE:page_failed_or_limited')
   pages.push(...skippedDiscoveryPages)
 
   const fetchedAssetPages = pages.flatMap((page) => {
@@ -2141,6 +2185,7 @@ async function buildScopedMultiPageDiscovery(input: {
   requireCompleteCapture?: boolean
   pageCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadHtmlPage' | 'saveHtmlPage'> | null
   assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> | null
+  pageBatchSize?: number
 }): Promise<{
   summary: MultiPageDiscoverySummary
   manifest: MultiPageDiscoveryManifest | null
@@ -2643,6 +2688,7 @@ async function buildScopedMultiPageDiscovery(input: {
     approvedUnusedCssDependencies: input.approvedUnusedCssDependencies,
     pageCheckpoint: input.pageCheckpoint,
     assetCheckpoint: input.assetCheckpoint,
+    pageBatchSize: input.pageBatchSize,
   })
   discoveryResult.summary.discoveredPageCount = manifest.discoveredPages.length
   discoveryResult.summary.routeCandidateCount = manifest.routeCandidates.length
@@ -2842,13 +2888,8 @@ async function buildMultipageImportFromPreparedSite(input: {
       siteId: deterministicId('site', input.sourceUrl),
       seedUrl: input.sourceUrl,
       limits: {
-        maxRoutes: 120,
-        maxDepth: 3,
-        maxLinksPerPage: 120,
+        ...DEFAULT_SCOPED_DISCOVERY_LIMITS,
         maxTemplateLinksPerRoute: 30,
-        maxSitemaps: 6,
-        maxUrlsFromSitemaps: 120,
-        maxNestedSitemaps: 4,
       },
       discoveredAt: null,
     },
@@ -3811,6 +3852,7 @@ export async function runScopedImportPipeline(input: {
   multiPageDiscovery?: ScopedMultiPageDiscoveryOption
   pageCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadHtmlPage' | 'saveHtmlPage'> | null
   assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> | null
+  pageBatchSize?: number
   deps?: Partial<ScopedImportPipelineDependencies>
 }): Promise<ScopedImportPipelineOutcome> {
   if (
@@ -3924,6 +3966,7 @@ export async function runScopedImportPipeline(input: {
     requireCompleteCapture: gitArchiveRequired && gitArchiveSelected,
     pageCheckpoint: input.pageCheckpoint,
     assetCheckpoint: input.assetCheckpoint,
+    pageBatchSize: input.pageBatchSize,
     approvedUnusedCssDependencies: [
       ...approvedUnusedCssDependencies(input.sourceUrl, input.ownershipScope?.siteId),
       ...input.snapshot.fetchManifest

@@ -43,7 +43,7 @@ test('enabled multi-page import sends expected default payload', () => {
     limits: DEFAULT_MULTI_PAGE_IMPORT_DISCOVERY_LIMITS,
     htmlAcquisitionLimits: DEFAULT_MULTI_PAGE_IMPORT_HTML_ACQUISITION_LIMITS,
   })
-  assert.equal(payload.multiPageDiscovery?.htmlAcquisitionLimits.maxPages, 120)
+  assert.equal(payload.multiPageDiscovery?.htmlAcquisitionLimits.maxPages, 1_000)
 })
 
 test('an explicit import action carries its stable attempt identity', () => {
@@ -79,7 +79,7 @@ test('edited multi-page import limits are respected', () => {
   assert.equal(payload.multiPageDiscovery?.htmlAcquisitionLimits.requestTimeoutMs, 4_500)
   assert.equal(payload.multiPageDiscovery?.limits.maxTemplateLinksPerRoute, 30)
   assert.equal(payload.multiPageDiscovery?.limits.maxSitemaps, 5)
-  assert.equal(payload.multiPageDiscovery?.limits.maxUrlsFromSitemaps, 100)
+  assert.equal(payload.multiPageDiscovery?.limits.maxUrlsFromSitemaps, 1_000)
   assert.equal(payload.multiPageDiscovery?.limits.maxNestedSitemaps, 5)
 })
 

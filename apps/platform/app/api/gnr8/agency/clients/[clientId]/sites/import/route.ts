@@ -18,11 +18,11 @@ import { SiteGitHubRepositoryProvisioner } from '@/gnr8/stacki/site-github-repos
 import { getSupabaseServiceRoleClient } from '@/src/supabase/service-role-server'
 import { inngest } from '@/gnr8/inngest/client'
 import { lookupImportOwnershipSiteId } from '@/gnr8/site/site-import-ownership-lookup'
-import { runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
+import { runScopedImportPipeline, ScopedImportContinuationRequired } from '@/gnr8/site/scoped-import-pipeline'
 import { deterministicId } from '@/gnr8/runtime/deterministic'
 import { RENDERER_COMPATIBILITY_VERSION } from '@/gnr8/runtime/types'
 import { getArtifactById, preallocateSiteVersionIdentity } from '@/gnr8/runtime/runtime-store'
-import { importPublicSinglePageUrlToSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
+import { importPublicSinglePageUrlToSnapshot, UrlImportAssetContinuationRequired } from '@/gnr8/validation/runtime/url-single-page-import'
 import { UrlImportSeedCheckpoint } from '@/gnr8/site/url-import-seed-checkpoint'
 import { ASTRO_CANDIDATE_OBJECT_BUCKET_ENV } from '@/gnr8/output-adapters/astro-production-candidate-object-store'
 import { getSuperadminPool } from '@/src/superadmin/db'
@@ -958,6 +958,14 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       { status: 200 },
     )
   } catch (error) {
+    if (error instanceof ScopedImportContinuationRequired) {
+      return NextResponse.json({ ok: false, continue: true,
+        completedPages: error.completedPages, discoveredPages: error.discoveredPages }, { status: 202 })
+    }
+    if (error instanceof UrlImportAssetContinuationRequired) {
+      return NextResponse.json({ ok: false, continue: true,
+        completedAssets: error.completedAssets, discoveredAssets: error.discoveredAssets }, { status: 202 })
+    }
     console.error('[site-import] SITE_IMPORT_SITE_CREATE_FAILED', {
       message: error instanceof Error ? error.message : String(error),
     })

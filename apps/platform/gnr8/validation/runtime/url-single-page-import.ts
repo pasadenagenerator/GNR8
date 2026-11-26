@@ -2755,6 +2755,13 @@ const ADDITIONAL_PAGE_ASSET_MAX_BYTES = 12 * 1024 * 1024;
 const ADDITIONAL_PAGE_ASSET_TIMEOUT_MS = 12_000;
 const ADDITIONAL_PAGE_ASSET_CONCURRENCY = 4;
 
+export class UrlImportAssetContinuationRequired extends Error {
+  constructor(readonly completedAssets: number, readonly discoveredAssets: number) {
+    super('SITE_IMPORT_ASSET_CONTINUATION_REQUIRED');
+    this.name = 'UrlImportAssetContinuationRequired';
+  }
+}
+
 async function fetchAssetBytesWithNodeFallback(input: {
   url: string;
   pageUrl: string;
@@ -2884,6 +2891,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   /** Exact script URLs acquired as inert bytes for reviewed-hash validation. */
   retainedScriptDependencyUrls?: string[];
   assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> | null;
+  maxFreshAssetsPerRun?: number;
   fetchImpl?: FetchLike;
 }): Promise<AdditionalHtmlPageAssetCaptureResult> {
   const fetcher = input.fetchImpl ?? fetch;
@@ -2912,6 +2920,12 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   }
   const localPathByUrl = new Map<string, string>();
   const outcomeByUrl = new Map<string, FetchOutcome>();
+  const cachedAssets = new Map<string, Awaited<ReturnType<UrlImportSeedCheckpoint['loadAsset']>>>();
+  const deferredResources = new Set<string>();
+  const maxFreshAssets = input.assetCheckpoint
+    ? Math.max(1, Math.min(512, Math.floor(input.maxFreshAssetsPerRun ?? 64))) : Number.POSITIVE_INFINITY;
+  let freshAssets = 0;
+  let assetCheckpointFailed = false;
   const usedPathToUrl = new Map<string, string>();
   const representativeUrlByIdentity = new Map<string, string>();
   const aliasToRepresentativeUrl = new Map<string, string>();
@@ -3086,7 +3100,12 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ADDITIONAL_PAGE_ASSET_TIMEOUT_MS);
     try {
-      const cached = await input.assetCheckpoint?.loadAsset(resolvedUrl);
+      const cached = cachedAssets.get(resolvedUrl) ?? await input.assetCheckpoint?.loadAsset(resolvedUrl);
+      if (!cached && attempt === 0 && freshAssets >= maxFreshAssets) {
+        if (!failedRequiredResources.has(resolvedUrl)) deferredResources.add(resolvedUrl);
+        return;
+      }
+      if (!cached && attempt === 0) freshAssets += 1;
       const { response, bytes } = cached ? {
         response: { ok: true, status: cached.status, url: cached.finalUrl,
           headers: new Headers(cached.contentType ? { 'content-type': cached.contentType } : {}) },
@@ -3148,6 +3167,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
           });
         } catch (error) {
           if (error instanceof Error && error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT') throw error;
+          assetCheckpointFailed = true;
           diagnostics.push(createDiagnostic({ severity: 'warning', code: 'MULTIPAGE_ASSET_CHECKPOINT_UNAVAILABLE',
             message: 'A fetched asset could not be cached for retry.', targetUrl: null, details: {} }));
         }
@@ -3168,6 +3188,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         byteLength: bytes.byteLength,
       });
       failedRequiredResources.delete(resolvedUrl);
+      deferredResources.delete(resolvedUrl);
     } catch (error) {
       if (error instanceof Error && error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT') throw error;
       if (attempt === 0) {
@@ -3182,11 +3203,19 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   };
 
   const directUrls = [...refsByUrl.keys()].sort((left, right) => left.localeCompare(right));
-  const needsFetch = (url: string): boolean => outcomeByUrl.get(url)?.fetchStatus !== "fetched";
+  if (input.assetCheckpoint) await mapWithBoundedConcurrency(directUrls, 8, async (url) => {
+    if (outcomeByUrl.get(url)?.fetchStatus === 'fetched') return;
+    const cached = await input.assetCheckpoint!.loadAsset(url);
+    if (cached) cachedAssets.set(url, cached);
+  });
+  const needsFetch = (url: string): boolean =>
+    outcomeByUrl.get(url)?.fetchStatus !== "fetched" && !cachedAssets.has(url);
   const newDirectUrls = directUrls.filter(needsFetch);
   const selectedNewDirectUrls = new Set(newDirectUrls.slice(0, ADDITIONAL_PAGE_ASSET_MAX_COUNT));
   const limitedDirectUrls = directUrls.filter((url) => !needsFetch(url) || selectedNewDirectUrls.has(url));
-  for (const omitted of newDirectUrls.slice(ADDITIONAL_PAGE_ASSET_MAX_COUNT)) failedRequiredResources.add(omitted);
+  for (const omitted of newDirectUrls.slice(ADDITIONAL_PAGE_ASSET_MAX_COUNT)) {
+    (input.assetCheckpoint ? deferredResources : failedRequiredResources).add(omitted);
+  }
   await mapWithBoundedConcurrency(limitedDirectUrls, ADDITIONAL_PAGE_ASSET_CONCURRENCY, async (resolvedUrl) => {
     const exemplar = refsByUrl.get(resolvedUrl)?.[0];
     if (!exemplar) return;
@@ -3237,10 +3266,17 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const remainingBudget = Math.max(0, ADDITIONAL_PAGE_ASSET_MAX_COUNT - selectedNewDirectUrls.size);
   const sortedDependencies = [...stylesheetDependencyUrls.entries()]
     .sort(([left], [right]) => left.localeCompare(right));
+  if (input.assetCheckpoint) await mapWithBoundedConcurrency(sortedDependencies, 8, async ([url]) => {
+    if (cachedAssets.has(url) || outcomeByUrl.get(url)?.fetchStatus === 'fetched') return;
+    const cached = await input.assetCheckpoint!.loadAsset(url);
+    if (cached) cachedAssets.set(url, cached);
+  });
   const newDependencies = sortedDependencies.filter(([url]) => needsFetch(url));
   const selectedNewDependencies = new Set(newDependencies.slice(0, remainingBudget).map(([url]) => url));
   const limitedDependencies = sortedDependencies.filter(([url]) => !needsFetch(url) || selectedNewDependencies.has(url));
-  for (const [omitted] of newDependencies.slice(remainingBudget)) failedRequiredResources.add(omitted);
+  for (const [omitted] of newDependencies.slice(remainingBudget)) {
+    (input.assetCheckpoint ? deferredResources : failedRequiredResources).add(omitted);
+  }
   await mapWithBoundedConcurrency(limitedDependencies, ADDITIONAL_PAGE_ASSET_CONCURRENCY, async ([resolvedUrl, meta]) => {
     await fetchOne(resolvedUrl, meta.assetKind, meta.pageUrl);
   });
@@ -3274,9 +3310,13 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       const representative = representativeUrlByIdentity.get(identity) ?? resolvedUrl;
       representativeUrlByIdentity.set(identity, representative);
       aliasToRepresentativeUrl.set(resolvedUrl, representative);
+      if (input.assetCheckpoint && !cachedAssets.has(representative)) {
+        const cached = await input.assetCheckpoint.loadAsset(representative);
+        if (cached) cachedAssets.set(representative, cached);
+      }
       if (!stylesheetDependencyUrls.has(representative) && needsFetch(representative) &&
           acquiredCount >= ADDITIONAL_PAGE_ASSET_MAX_COUNT) {
-        failedRequiredResources.add(representative);
+        (input.assetCheckpoint ? deferredResources : failedRequiredResources).add(representative);
         continue;
       }
       assignLocalPath(representative, assetKind);
@@ -3482,6 +3522,14 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const discoveredReferenceCount =
     pageResults.reduce((sum, page) => sum + page.discoveredReferenceCount, 0) + stylesheetDependencyUrls.size;
   const uniqueReferencedUrls = new Set([...refsByUrl.keys(), ...stylesheetDependencyUrls.keys()]);
+  if (deferredResources.size > 0) {
+    if (assetCheckpointFailed) throw new Error('SITE_IMPORT_ASSET_CHECKPOINT_UNAVAILABLE');
+    if (failedRequiredResources.size > 0) throw new Error('GITHUB_IMPORT_INCOMPLETE_CAPTURE:required_child_asset_missing');
+    throw new UrlImportAssetContinuationRequired(
+      [...uniqueReferencedUrls].filter((url) => outcomeByUrl.get(url)?.fetchStatus === 'fetched').length,
+      uniqueReferencedUrls.size + [...deferredResources].filter((url) => !uniqueReferencedUrls.has(url)).length,
+    );
+  }
   const directReferenceCount = [...refsByUrl.values()].reduce((sum, refs) => sum + refs.length, 0);
   return {
     pages: pageResults,

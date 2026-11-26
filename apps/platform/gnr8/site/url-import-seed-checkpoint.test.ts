@@ -67,6 +67,10 @@ test('seed capture is restored from private storage for the same import identity
       finalUrl: pageUrl, status: 200, redirected: false,
       contentType: 'text/html', bytes: Buffer.from('<main>About</main>'),
     })
+    const deletedUrl = 'https://example.com/deleted'
+    await checkpoint.saveHtmlPage(deletedUrl, { finalUrl: deletedUrl, status: 404,
+      redirected: false, contentType: 'text/html', bytes: Buffer.alloc(0) })
+    assert.equal((await checkpoint.loadHtmlPage(deletedUrl))?.status, 404)
     await assert.rejects(checkpoint.saveHtmlPage(pageUrl, {
       finalUrl: pageUrl, status: 200, redirected: false,
       contentType: 'text/html', bytes: Buffer.from('<main>Changed</main>'),

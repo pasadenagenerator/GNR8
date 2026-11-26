@@ -11,6 +11,7 @@ import {
   captureAssetsForAdditionalHtmlPages,
   computeLocalPathCandidate,
   importPublicSinglePageUrlToSnapshot,
+  UrlImportAssetContinuationRequired,
 } from "@/gnr8/validation/runtime/url-single-page-import";
 
 function validWoff2Fixture(): Uint8Array {
@@ -235,6 +236,70 @@ test("child asset capture reuses verified bytes on a later import attempt", asyn
     }
     assert.equal(sourceRequests, 1);
     assert.deepEqual(saved.get(assetUrl)?.bytes, Buffer.from([1, 2, 3]));
+  } finally {
+    roots.forEach((root) => fs.rmSync(root, { recursive: true, force: true }));
+  }
+});
+
+test("child assets complete in bounded steps without refetching prior bytes", async () => {
+  const saved = new Map<string, CachedImportHtmlPage>();
+  const requests: string[] = [];
+  const assetCheckpoint = {
+    loadAsset: async (url: string) => saved.get(url) ?? null,
+    saveAsset: async (url: string, asset: CachedImportHtmlPage) => { saved.set(url, asset); },
+  };
+  const roots: string[] = [];
+  try {
+    for (let step = 0; step < 3; step += 1) {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-asset-step-"));
+      roots.push(root);
+      const capture = captureAssetsForAdditionalHtmlPages({
+        snapshotRootDirAbs: root,
+        pages: [{ pageUrl: "https://example.com/about", bodyPath: path.join(root, "about.html"),
+          html: [1, 2, 3].map((number) => `<img src="https://example.com/${number}.png">`).join("") }],
+        assetCheckpoint,
+        maxFreshAssetsPerRun: 1,
+        fetchImpl: async (request) => {
+          requests.push(String(request instanceof Request ? request.url : request));
+          return new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } });
+        },
+      });
+      if (step < 2) await assert.rejects(capture, UrlImportAssetContinuationRequired);
+      else assert.equal((await capture).summary.failedRequiredAssetCount, 0);
+    }
+    assert.deepEqual(requests, [1, 2, 3].map((number) => `https://example.com/${number}.png`));
+  } finally {
+    roots.forEach((root) => fs.rmSync(root, { recursive: true, force: true }));
+  }
+});
+
+test("child asset continuation crosses the former 512-file boundary", async () => {
+  const saved = new Map<string, CachedImportHtmlPage>();
+  const roots: string[] = [];
+  let requests = 0;
+  const html = Array.from({ length: 513 }, (_, index) =>
+    `<img src="https://example.com/${String(index).padStart(3, "0")}.png">`).join("");
+  try {
+    for (let step = 0; step < 2; step += 1) {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-asset-512-step-"));
+      roots.push(root);
+      const capture = captureAssetsForAdditionalHtmlPages({
+        snapshotRootDirAbs: root,
+        pages: [{ pageUrl: "https://example.com/about", bodyPath: path.join(root, "about.html"), html }],
+        assetCheckpoint: {
+          loadAsset: async (url) => saved.get(url) ?? null,
+          saveAsset: async (url, asset) => { saved.set(url, asset); },
+        },
+        maxFreshAssetsPerRun: 512,
+        fetchImpl: async () => {
+          requests += 1;
+          return new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } });
+        },
+      });
+      if (step === 0) await assert.rejects(capture, UrlImportAssetContinuationRequired);
+      else assert.equal((await capture).summary.failedRequiredAssetCount, 0);
+    }
+    assert.equal(requests, 513);
   } finally {
     roots.forEach((root) => fs.rmSync(root, { recursive: true, force: true }));
   }
