@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
 import { RawImportGitCache } from '@/gnr8/site/raw-import-git-cache';
+import { MAX_RETAINED_ASSET_BYTES } from '@/gnr8/site/retained-asset-limits';
 import type { RawImportedSiteArtifactMetadata } from '@/gnr8/runtime/types';
 
 const headers = {
@@ -67,7 +68,7 @@ export function createVerifiedRetainedAssetReader(client: SupabaseClient, batchF
       let group: string[] = [], bytes = 0;
       for (const path of paths) {
         const size = fileMap[path]?.sizeBytes;
-        if (!Number.isSafeInteger(size) || size < 0 || size > 12 * 1024 * 1024) throw new Error('Invalid retained file size');
+        if (!Number.isSafeInteger(size) || size < 0 || size > MAX_RETAINED_ASSET_BYTES) throw new Error('Invalid retained file size');
         if (group.length && (group.length >= 8 || bytes + size > 4 * 1024 * 1024)) {
           if (group.includes(input.path)) break;
           group = []; bytes = 0;

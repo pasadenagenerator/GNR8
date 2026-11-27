@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { MAX_RETAINED_ASSET_BYTES } from './retained-asset-limits'
 import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
 import { resolveUrlImportSnapshotRootDirAbs } from '@/gnr8/validation/runtime/url-import-snapshot-root'
 
@@ -139,7 +140,7 @@ export class UrlImportSeedCheckpoint {
       kind === 'pages' && (page.status === 404 || page.status === 410)
     if (!/^https?:\/\//.test(page.finalUrl) || page.finalUrl.length > 2048 ||
       !Number.isInteger(page.status) || !allowedStatus ||
-      page.bytes.length > 16 * 1024 * 1024 || (page.contentType?.length ?? 0) > 256) fail()
+      page.bytes.length > MAX_RETAINED_ASSET_BYTES || (page.contentType?.length ?? 0) > 256) fail()
     const header = Buffer.from(JSON.stringify({ kind: `url_import_${kind}_v1`, url,
       finalUrl: page.finalUrl, status: page.status, redirected: page.redirected,
       contentType: page.contentType, bytes: page.bytes.length, sha256: hash(page.bytes) }))

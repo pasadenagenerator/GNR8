@@ -4,6 +4,7 @@ import https from "node:https";
 import path from "node:path";
 
 import { parse, parseFragment, serialize } from "parse5";
+import { MAX_RETAINED_ASSET_BYTES } from "../../site/retained-asset-limits";
 import type { UrlImportSeedCheckpoint } from "../../site/url-import-seed-checkpoint";
 import { collectHtmlSelectorEvidence, findProvablyUnusedCssDependencies } from "../../output-adapters/source-backed-css-dependency-analysis";
 
@@ -2755,7 +2756,7 @@ export type AdditionalHtmlPageAssetCaptureResult = {
 };
 
 const ADDITIONAL_PAGE_ASSET_MAX_COUNT = 512;
-const ADDITIONAL_PAGE_ASSET_MAX_BYTES = 12 * 1024 * 1024;
+const ADDITIONAL_PAGE_ASSET_MAX_BYTES = MAX_RETAINED_ASSET_BYTES;
 const ADDITIONAL_PAGE_ASSET_TIMEOUT_MS = 12_000;
 const ADDITIONAL_PAGE_ASSET_CONCURRENCY = 4;
 

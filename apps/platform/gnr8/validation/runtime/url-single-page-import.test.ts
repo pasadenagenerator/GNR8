@@ -239,6 +239,30 @@ test("child pages ignore CMS data-req component names but retain URL-like data-r
   }
 });
 
+test("child capture retains a 13.46 MB source image within the shared asset limit", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-large-image-"));
+  const imageUrl = "https://www.viroidoc.eu/uploads/large-source.jpg";
+  const sourceBytes = new Uint8Array(13_459_935);
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [{ pageUrl: "https://www.viroidoc.eu/news", bodyPath: path.join(root, "news.html"),
+        html: `<img src="${imageUrl}">` }],
+      fetchImpl: async (request) => {
+        assert.equal(String(request instanceof Request ? request.url : request), imageUrl);
+        return new Response(sourceBytes, { headers: { "content-type": "image/jpeg" } });
+      },
+    });
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    const image = result.manifestEntries.find((entry) => entry.resolvedUrl === imageUrl);
+    assert.equal(image?.fetchStatus, "fetched");
+    assert.equal(image?.byteLength, sourceBytes.length);
+    assert.ok(image?.localPath && fs.statSync(path.join(root, image.localPath)).size === sourceBytes.length);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("child asset capture reuses verified bytes on a later import attempt", async () => {
   const roots = [0, 1].map(() => fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-asset-resume-")));
   const assetUrl = "https://example.com/logo.png";
