@@ -4,7 +4,11 @@ import path from 'node:path'
 import test from 'node:test'
 import { createClient } from '@supabase/supabase-js'
 
-import type { UrlSinglePageImportSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
+import {
+  captureAssetsForAdditionalHtmlPages,
+  UrlImportAssetContinuationRequired,
+  type UrlSinglePageImportSnapshot,
+} from '@/gnr8/validation/runtime/url-single-page-import'
 import { resolveUrlImportSnapshotRootDirAbs } from '@/gnr8/validation/runtime/url-import-snapshot-root'
 import { UrlImportSeedCheckpoint } from './url-import-seed-checkpoint'
 
@@ -141,6 +145,23 @@ test('seed capture is restored from private storage for the same import identity
     assert.equal(await checkpoint.hasAsset('https://example.com/not-there.png'), false)
     assert.equal(downloads, downloadsBeforePresenceCheck)
     assert.deepEqual((await checkpoint.loadAsset(assetUrl))?.bytes, Buffer.from([1, 2, 3]))
+    let sourceRequests = 0
+    const childHtml = Array.from({ length: 17 }, (_, index) =>
+      `<img src="https://example.com/child-${index}.png">`).join('')
+    const childInput = {
+      snapshotRootDirAbs: restored.snapshotRootDirAbs,
+      pages: [{ pageUrl: 'https://example.com/child',
+        bodyPath: path.join(restored.snapshotRootDirAbs, 'child.html'), html: childHtml }],
+      assetCheckpoint: checkpoint,
+      fetchImpl: async () => {
+        sourceRequests += 1
+        return new Response('x', { headers: { 'content-type': 'image/png' } })
+      },
+    }
+    await assert.rejects(captureAssetsForAdditionalHtmlPages(childInput), UrlImportAssetContinuationRequired)
+    assert.equal(sourceRequests, 16)
+    assert.equal((await captureAssetsForAdditionalHtmlPages(childInput)).summary.fetchedAssetCount, 17)
+    assert.equal(sourceRequests, 17)
     assert.equal(await checkpoint.load('https://different.example.com/').then(() => false).catch(() => true), true)
     const imageObject = [...objects].find(([key, body]) => key.includes('/files/') && body.equals(Buffer.from([1, 2, 3])))
     assert.ok(imageObject)
