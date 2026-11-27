@@ -10,11 +10,28 @@ export const RAW_IMPORT_GIT_MAX_BYTES=512*1024*1024;
 type GitTransferLimits={maxBytes?:number;timeoutMs?:number};
 function githubHttp(url:string,transport:typeof fetch,deadline:number,maxBytes:number):GitHttp{return {async request(request){
   const endpoint=new URL(request.url);if(endpoint.origin!=='https://github.com'||![url+'/info/refs',url+'/git-upload-pack',url+'/git-receive-pack'].includes(endpoint.origin+endpoint.pathname))throw Error('standalone_git_endpoint_invalid');
-  const chunks:Buffer[]=[];let bytes=0;if(request.body)for await(const chunk of request.body){const b=Buffer.from(chunk);bytes+=b.length;if(bytes>maxBytes)throw Error('standalone_git_budget_exceeded');chunks.push(b);}
   if(Date.now()>=deadline)throw Error('standalone_git_timeout');
-  const response=await transport(request.url,{method:request.method??'GET',headers:request.headers,body:chunks.length?Buffer.concat(chunks):undefined,redirect:'error',signal:AbortSignal.timeout(Math.max(1,deadline-Date.now()))});
-  const output:Uint8Array[]=[];let total=0;if(response.body)for await(const chunk of response.body as unknown as AsyncIterable<Uint8Array>){total+=chunk.length;if(total>maxBytes)throw Error('standalone_git_budget_exceeded');output.push(chunk);}
-  return {url:request.url,method:request.method??'GET',statusCode:response.status,statusMessage:response.statusText,headers:Object.fromEntries(response.headers),body:(async function*(){yield* output;})()};
+  const iterator=request.body?(async function*(){for await(const chunk of request.body!)yield chunk;})()[Symbol.asyncIterator]():undefined;let sent=0;
+  const body=iterator?new ReadableStream<Uint8Array>({
+    async pull(controller){
+      try{
+        const next=await iterator.next();if(next.done){controller.close();return;}
+        const chunk=Buffer.from(next.value);sent+=chunk.length;
+        if(sent>maxBytes)throw Error('standalone_git_budget_exceeded');
+        controller.enqueue(chunk);
+      }catch(error){controller.error(error);}
+    },
+    async cancel(){await iterator.return?.();},
+  }):undefined;
+  const response=await transport(request.url,{method:request.method??'GET',headers:request.headers,
+    body:body as BodyInit|undefined,duplex:'half',redirect:'error',
+    signal:AbortSignal.timeout(Math.max(1,deadline-Date.now()))} as RequestInit & {duplex:'half'});
+  return {url:request.url,method:request.method??'GET',statusCode:response.status,statusMessage:response.statusText,
+    headers:Object.fromEntries(response.headers),body:(async function*(){
+      let received=0;if(response.body)for await(const chunk of response.body as unknown as AsyncIterable<Uint8Array>){
+        received+=chunk.length;if(received>maxBytes)throw Error('standalone_git_budget_exceeded');yield chunk;
+      }
+    })()};
  }};}
 export async function readStandaloneGit(input:{owner:string;repository:string;branch:string;commit:string;token:string},transport:typeof fetch=fetch,limits:GitTransferLimits={}){
  const dir=await mkdtemp(join(tmpdir(),'gnr8-stacki-git-read-'));const url=`https://github.com/${input.owner}/${input.repository}.git`;
@@ -39,13 +56,22 @@ export async function pushStandaloneGit(input:{owner:string;repository:string;de
  const deadline=Date.now()+(limits.timeoutMs??180000);
  const http=githubHttp(url,transport,deadline,limits.maxBytes??128*1024*1024);
  const onAuth=()=>({username:'x-access-token',password:input.token});
+ let stage:'clone'|'write_tree'|'push'='clone';
  try{
   await git.clone({fs,http,dir,url,ref:input.defaultBranch,singleBranch:true,noCheckout:true,noTags:true,depth:1,onAuth,onAuthFailure:()=>{throw Error('standalone_git_auth_failed');}});
+  stage='write_tree';
   const parent=await git.resolveRef({fs,dir,ref:input.defaultBranch});if(parent!==input.parent)throw Error('standalone_git_parent_changed');
   const tree=await writeExportTree(dir,input.files);const author={...input.author,timestamp:Math.floor(Date.now()/1000),timezoneOffset:0};
   const commit=await git.writeCommit({fs,dir,commit:{tree,parent:[parent],author,committer:author,message:`Standalone release ${input.manifestSha256}\n`}});
   await git.writeRef({fs,dir,ref:'refs/'+input.ref,value:commit,force:true});
+  stage='push';
   const result=await git.push({fs,http,dir,url,ref:'refs/'+input.ref,remoteRef:'refs/'+input.ref,force:false,onAuth,onAuthFailure:()=>{throw Error('standalone_git_auth_failed');}});
   if(!result.ok)throw Error('standalone_git_push_unconfirmed');return {commit,tree};
- }catch{throw Error('standalone_git_push_unconfirmed');}finally{await rm(dir,{recursive:true,force:true});}
+ }catch(error){
+  const detail=error as {name?:unknown;code?:unknown;statusCode?:unknown};
+  const safe=(value:unknown)=>typeof value==='string'&&/^[A-Za-z0-9_]{1,48}$/.test(value)?value:null;
+  console.error('[standalone-git] PUSH_FAILED',{stage,name:safe(detail?.name),code:safe(detail?.code),
+    statusCode:Number.isInteger(detail?.statusCode)?detail.statusCode:null});
+  throw Error('standalone_git_push_unconfirmed');
+ }finally{await rm(dir,{recursive:true,force:true});}
 }
