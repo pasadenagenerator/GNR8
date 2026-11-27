@@ -6,6 +6,8 @@ import { SupabasePublicationStore } from './publication-store';
 import { ensureBoundCloudflareStudioDraftBucket } from './cloudflare-studio-draft-bucket';
 import { ensureBoundCloudflareNativeWorkerReservations } from './cloudflare-studio-worker-reservation';
 import { SiteGitHubRepositoryBinding } from '../stacki/site-github-repository-binding';
+import { configuredGitHubTarget, stackiGithubSelected } from '../stacki/stacki-github-config';
+import { GitHubStackiStore } from '../stacki/stacki-github-store';
 
 type Environment = Record<string, string | undefined>;
 const HEX32 = /^[a-f0-9]{32}$/;
@@ -56,18 +58,30 @@ export async function recordNativeStudioResourceReceipt(receipt: NativeStudioRes
  * scope and actor; it cannot select a domain, repository or Cloudflare account.
  */
 export async function readNativeStudioBootstrapTarget(scope: NativeStudioScope,
-  client: SupabaseClient, accountId: string) {
+  client: SupabaseClient, accountId: string, transport: typeof fetch = fetch,
+  reconcileLegacyBinding = false) {
   if (!scope || ![scope.agencyId, scope.clientId, scope.siteId]
     .every(value => typeof value === 'string' && UUID.test(value)) ||
       !HEX32.test(accountId))
     throw Error('native_studio_bootstrap_target_invalid');
-  const [site, repository] = await Promise.all([
+  const [site, boundRepository] = await Promise.all([
     client.from('sites').select('domain').eq('id', scope.siteId)
       .eq('agency_id', scope.agencyId).eq('org_id', scope.clientId).maybeSingle(),
     new SiteGitHubRepositoryBinding(client).readForPublication(scope),
   ]);
   if (site.error || !site.data || typeof site.data.domain !== 'string' ||
-      !DOMAIN.test(site.data.domain) || !repository)
+      !DOMAIN.test(site.data.domain))
+    throw Error('native_studio_bootstrap_target_unverified');
+  let repository = boundRepository;
+  if (!repository && reconcileLegacyBinding &&
+      stackiGithubSelected({ ...scope, siteVersionId: scope.siteId })) {
+    const target = configuredGitHubTarget({ ...scope, siteVersionId: scope.siteId });
+    const ownerKind = await new GitHubStackiStore(
+      { ...scope, siteVersionId: scope.siteId }, target, transport).verifiedOwnerKind();
+    repository = { ...await new SiteGitHubRepositoryBinding(client, transport).bindVerified(scope,
+      { ...target, ownerKind }), ownerKind };
+  }
+  if (!repository)
     throw Error('native_studio_bootstrap_target_unverified');
   return { scope, accountId, studioOrigin: `https://${site.data.domain}`,
     repository: `${repository.owner}/${repository.repository}`,
@@ -96,7 +110,8 @@ export async function reserveConfiguredNativeStudioResources(
     bucket: string) => new SupabasePublicationStore(db, bucket, targetScope),
 ) {
   const setup = configuredNativeStudioResourceReservation(env);
-  const target = await readNativeStudioBootstrapTarget(scope, client, setup.accountId);
+  const target = await readNativeStudioBootstrapTarget(scope, client, setup.accountId,
+    transport, true);
   const store = makeStore(client,
     scope, env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes');
   const draftBucket = await deps.draft(scope, client,

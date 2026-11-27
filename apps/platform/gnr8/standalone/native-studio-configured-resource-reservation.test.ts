@@ -77,6 +77,75 @@ test('bootstrap target comes from the current scoped site and bound repository',
     valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID), /site_github_binding_pending/);
 });
 
+test('bootstrap binds an allowlisted legacy import repository once before reserving resources', async t => {
+  const keys = ['GNR8_STACKI_GITHUB_ENABLED', 'GNR8_STACKI_GITHUB_SITE_IDS',
+    'GNR8_STACKI_GITHUB_TARGETS', 'GNR8_STACKI_GITHUB_TOKEN'] as const;
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  t.after(() => { for (const key of keys) {
+    if (previous[key] === undefined) delete process.env[key];
+    else process.env[key] = previous[key];
+  } });
+  Object.assign(process.env, {
+    GNR8_STACKI_GITHUB_ENABLED: '1',
+    GNR8_STACKI_GITHUB_SITE_IDS: JSON.stringify([scope.siteId]),
+    GNR8_STACKI_GITHUB_TARGETS: JSON.stringify({ [scope.siteId]: {
+      owner: 'pasadenagenerator', ownerId: 12, repository: 'gnr8-legacy-site', repositoryId: 34,
+    } }),
+    GNR8_STACKI_GITHUB_TOKEN: 'local-test-token',
+  });
+  let binding: Record<string, unknown> | null = null;
+  let writes = 0;
+  let providerReads = 0;
+  const client = { from(name: string) {
+    if (name === 'sites') {
+      const query = { select: () => query, eq: () => query,
+        maybeSingle: async () => ({ data: { domain: 'site.app.pasadenagenerator.com' }, error: null }) };
+      return query;
+    }
+    assert.equal(name, 'gnr8_site_github_repository_bindings');
+    const query = { select: () => query, eq: () => query,
+      maybeSingle: async () => ({ data: binding, error: null }),
+      insert: async (row: Record<string, unknown>) => {
+        writes++;
+        binding = row;
+        return { error: null };
+      } };
+    return query;
+  } } as unknown as SupabaseClient;
+  const transport: typeof fetch = async (url, options) => {
+    providerReads++;
+    assert.equal(String(url), 'https://api.github.com/repos/pasadenagenerator/gnr8-legacy-site');
+    assert.equal(new Headers(options?.headers).get('authorization'), 'Bearer local-test-token');
+    return Response.json({ private: true, id: 34, name: 'gnr8-legacy-site',
+      owner: { id: 12, login: 'pasadenagenerator', type: 'User' },
+      description: `GNR8 standalone site ${scope.siteId}`, permissions: { push: true } });
+  };
+  const expected = { scope, accountId: valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID,
+    studioOrigin: 'https://site.app.pasadenagenerator.com',
+    repository: 'pasadenagenerator/gnr8-legacy-site', repositoryId: 34 };
+  await assert.rejects(readNativeStudioBootstrapTarget(scope, client,
+    valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID, transport),
+  /native_studio_bootstrap_target_unverified/);
+  assert.equal(writes, 0, 'ordinary reads do not create a repository binding');
+  const draft = { bucket: `gnr8-${scope.siteId}-drafts`, bucketId: 'b'.repeat(32) };
+  const workers = { studio: { worker: `gnr8-${scope.siteId}-studio`, id: 'c'.repeat(32) },
+    publicSite: { worker: `gnr8-${scope.siteId}-site`, id: 'd'.repeat(32) } };
+  const saved = new Map<string, unknown>();
+  const store = { read: async (key: string) => saved.get(key) ?? null,
+    claim: async (key: string, value: unknown) => { saved.set(key, value); return true; } };
+  assert.deepEqual(await reserveConfiguredNativeStudioResources(scope, client, valid,
+    transport, { draft: async () => draft, workers: async () => workers },
+    () => store as never), { target: expected, draftBucket: draft, workers });
+  assert.deepEqual(saved.get(NATIVE_STUDIO_RESOURCE_RECEIPT),
+    { target: expected, draftBucket: draft, workers });
+  assert.equal(binding?.github_owner_kind, 'User');
+  assert.equal(JSON.stringify(binding).includes('local-test-token'), false);
+  assert.deepEqual(await readNativeStudioBootstrapTarget(scope, client,
+    valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID, transport), expected);
+  assert.equal(writes, 1);
+  assert.equal(providerReads, 2, 'the verified binding avoids later provider reads');
+});
+
 test('reservation returns the verified target and rejects drift during provider work', async () => {
   const f = currentTarget();
   const draft = { bucket: `gnr8-${scope.siteId}-drafts`, bucketId: 'b'.repeat(32) };
