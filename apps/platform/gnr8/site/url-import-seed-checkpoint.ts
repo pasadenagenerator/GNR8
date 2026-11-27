@@ -46,6 +46,13 @@ function isMissing(error: unknown): boolean {
     (status === '400' || code === '400') && /not found|NoSuchKey/i.test(message)
 }
 
+function isRateLimited(error: unknown): boolean {
+  const storageError = error as { status?: unknown; statusCode?: unknown;
+    originalError?: { status?: unknown } } | null
+  return [storageError?.status, storageError?.statusCode,
+    storageError?.originalError?.status].some((status) => String(status) === '429')
+}
+
 /** Immutable seed capture, scoped to one agency/client/version/attempt. */
 export class UrlImportSeedCheckpoint {
   private readonly prefix: string
@@ -74,8 +81,13 @@ export class UrlImportSeedCheckpoint {
 
   private async read(key: string): Promise<Buffer | null> {
     const bucket = await this.bucket()
-    const result = await bucket.download(key)
+    let result = await bucket.download(key)
+    for (let attempt = 0; result.error && isRateLimited(result.error) && attempt < 3; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt))
+      result = await bucket.download(key)
+    }
     if (result.error) {
+      if (isRateLimited(result.error)) throw new Error('URL_IMPORT_SEED_CHECKPOINT_RATE_LIMITED')
       if (isMissing(result.error)) return null
       // Storage JS downloads blobs without parsing error JSON. Supabase can return
       // HTTP 400 for a missing object, wrapped as StorageUnknownError. Verify the

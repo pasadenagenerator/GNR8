@@ -3253,8 +3253,11 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       throw new UrlImportAssetContinuationRequired(completedAssets, directUrls.length);
     }
   }
-  if (input.assetCheckpoint) await mapWithBoundedConcurrency(directUrls, 8, async (url) => {
+  if (input.assetCheckpoint) await mapWithBoundedConcurrency(directUrls, 2, async (url) => {
     if (outcomeByUrl.get(url)?.fetchStatus === 'fetched') return;
+    // The final pass reads every retained asset. Pace these downloads so a large
+    // site does not exhaust the storage API's burst limit near completion.
+    await new Promise((resolve) => setTimeout(resolve, 150));
     const cached = await input.assetCheckpoint!.loadAsset(url);
     if (cached) cachedAssets.set(url, cached);
   });

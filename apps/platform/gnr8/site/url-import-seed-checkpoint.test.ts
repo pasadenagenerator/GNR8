@@ -35,6 +35,30 @@ test('missing checkpoint is recognized through the real Supabase Storage downloa
   assert.equal(await checkpoint.load('https://example.com/'), null)
 })
 
+test('transient storage rate limit is retried before declaring a checkpoint missing', async () => {
+  let downloads = 0
+  const storage = {
+    getBucket: async () => ({ data: { public: false }, error: null }),
+    from: () => ({
+      list: async () => ({ data: [], error: null }),
+      download: async () => {
+        downloads += 1
+        return { data: null, error: downloads < 3
+          ? { originalError: { status: 429 } }
+          : { statusCode: 'NoSuchKey' } }
+      },
+    }),
+  }
+  const checkpoint = new UrlImportSeedCheckpoint({ storage } as never, 'private-bucket', {
+    agencyId: '11111111-1111-4111-8111-111111111111',
+    clientId: '22222222-2222-4222-8222-222222222222',
+    siteVersionId: '33333333-3333-4333-8333-333333333333',
+    importAttemptId: '44444444-4444-4444-8444-444444444444',
+  })
+  assert.equal(await checkpoint.load('https://example.com/'), null)
+  assert.equal(downloads, 3)
+})
+
 test('seed capture is restored from private storage for the same import identity', async () => {
   const objects = new Map<string, Buffer>()
   let rejectExisting = false
