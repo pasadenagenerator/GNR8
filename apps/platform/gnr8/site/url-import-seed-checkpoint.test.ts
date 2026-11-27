@@ -54,8 +54,9 @@ test('seed capture is restored from private storage for the same import identity
       },
       list: async (folder: string, options: { search?: string; offset?: number; limit?: number }) => {
         if (folder.endsWith('/assets') && !options.search) assetLists += 1
-        return { data: [...objects.keys()].filter((key) => key.startsWith(`${folder}/`))
-          .map((key) => ({ name: key.slice(folder.length + 1) }))
+        return { data: [...new Set([...objects.keys()].filter((key) => key.startsWith(`${folder}/`))
+          .map((key) => key.slice(folder.length + 1).split('/')[0]))]
+          .map((name) => ({ name }))
           .filter((entry) => !options.search || entry.name === options.search)
           .slice(options.offset ?? 0, (options.offset ?? 0) + (options.limit ?? 100)), error: null }
       },
@@ -67,7 +68,7 @@ test('seed capture is restored from private storage for the same import identity
     siteVersionId: '33333333-3333-4333-8333-333333333333',
     importAttemptId: '44444444-4444-4444-8444-444444444444',
   }
-  const checkpoint = new UrlImportSeedCheckpoint({ storage } as never, 'private-bucket', identity)
+  let checkpoint = new UrlImportSeedCheckpoint({ storage } as never, 'private-bucket', identity)
   const snapshotId = 'imported-url-site-1234567890abcdef'
   const stableRoot = path.join(resolveUrlImportSnapshotRootDirAbs(), snapshotId)
   const root = path.join(stableRoot, 'runs', 'checkpoint-test-run')
@@ -96,6 +97,18 @@ test('seed capture is restored from private storage for the same import identity
     rejectExisting = true
     await assert.rejects(checkpoint.load(snapshot.sourceUrl), /URL_IMPORT_SEED_CHECKPOINT_INVALID/)
     rejectExisting = false
+    for (const [key, body] of [...objects]) {
+      if (!key.includes('/capture-v1/')) continue
+      objects.delete(key)
+      objects.set(key.replace('/capture-v1/', `/${'a'.repeat(40)}/`), body)
+    }
+    const legacyManifestKey = [...objects.keys()].find((key) => key.endsWith('/manifest.json'))!
+    const conflictingManifestKey = legacyManifestKey.replace(`/${'a'.repeat(40)}/`, `/${'b'.repeat(40)}/`)
+    objects.set(conflictingManifestKey, Buffer.from('different capture'))
+    await assert.rejects(new UrlImportSeedCheckpoint({ storage } as never, 'private-bucket', identity)
+      .load(snapshot.sourceUrl), /URL_IMPORT_CHECKPOINT_CONFLICT/)
+    objects.delete(conflictingManifestKey)
+    checkpoint = new UrlImportSeedCheckpoint({ storage } as never, 'private-bucket', identity)
     fs.rmSync(root, { recursive: true, force: true })
     const restored = await checkpoint.load(snapshot.sourceUrl)
     assert.ok(restored?.snapshotRootDirAbs.startsWith(path.join(stableRoot, 'runs', 'resume-')))

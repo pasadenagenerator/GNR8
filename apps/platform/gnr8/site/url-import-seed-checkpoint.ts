@@ -48,6 +48,7 @@ function isMissing(error: unknown): boolean {
 /** Immutable seed capture, scoped to one agency/client/version/attempt. */
 export class UrlImportSeedCheckpoint {
   private readonly prefix: string
+  private activePrefix: string
   private bucketPromise?: Promise<ReturnType<Storage['storage']['from']>>
   private readonly responseIndex = new Map<'pages' | 'assets', Promise<Set<string>>>()
   constructor(
@@ -57,9 +58,8 @@ export class UrlImportSeedCheckpoint {
   ) {
     if (!Object.values(identity).every((value) => UUID.test(value)) ||
       !/^[a-z0-9][a-z0-9_-]{0,62}$/.test(bucketName)) fail()
-    const deploymentRevision = /^[a-f0-9]{40}$/.test(process.env.VERCEL_GIT_COMMIT_SHA ?? '')
-      ? process.env.VERCEL_GIT_COMMIT_SHA : 'local'
-    this.prefix = `url-import-seed/v1/${identity.agencyId}/${identity.clientId}/${identity.siteVersionId}/${identity.importAttemptId}/${deploymentRevision}`
+    this.prefix = `url-import-seed/v1/${identity.agencyId}/${identity.clientId}/${identity.siteVersionId}/${identity.importAttemptId}/capture-v1`
+    this.activePrefix = this.prefix
   }
 
   private async bucket() {
@@ -108,7 +108,7 @@ export class UrlImportSeedCheckpoint {
 
   private responseKey(kind: 'pages' | 'assets', url: string): string {
     if (!/^https?:\/\//.test(url) || url.length > 2048) fail()
-    return `${this.prefix}/${kind}/${hash(Buffer.from(url))}`
+    return `${this.activePrefix}/${kind}/${hash(Buffer.from(url))}`
   }
 
   private async responseNames(kind: 'pages' | 'assets'): Promise<Set<string>> {
@@ -117,7 +117,7 @@ export class UrlImportSeedCheckpoint {
       index = (async () => {
         const bucket = await this.bucket()
         const names = new Set<string>()
-        const folder = `${this.prefix}/${kind}`
+        const folder = `${this.activePrefix}/${kind}`
         for (let offset = 0; offset < 100_000; offset += 1_000) {
           const result = await bucket.list(folder, { limit: 1_000, offset })
           if (result.error || !result.data) fail()
@@ -240,7 +240,29 @@ export class UrlImportSeedCheckpoint {
   }
 
   async load(sourceUrl: string): Promise<UrlSinglePageImportSnapshot | null> {
-    const manifestBody = await this.read(`${this.prefix}/manifest.json`)
+    let manifestBody = await this.read(`${this.prefix}/manifest.json`)
+    if (!manifestBody) {
+      // Earlier deployments scoped checkpoints to the Git revision. Reuse one
+      // validated v1 capture for this same immutable import attempt after upgrades.
+      const parent = this.prefix.slice(0, this.prefix.lastIndexOf('/'))
+      const bucket = await this.bucket()
+      const revisions = await bucket.list(parent, { limit: 1_000 })
+      if (revisions.error || !revisions.data || revisions.data.length === 1_000) fail()
+      let legacy: { prefix: string; body: Buffer } | null = null
+      for (const entry of revisions.data) {
+        if (!/^[a-f0-9]{40}$|^local$/.test(entry.name)) continue
+        const legacyPrefix = `${parent}/${entry.name}`
+        const body = await this.read(`${legacyPrefix}/manifest.json`)
+        if (!body) continue
+        if (legacy && !legacy.body.equals(body)) throw new Error('URL_IMPORT_CHECKPOINT_CONFLICT')
+        legacy = { prefix: legacyPrefix, body }
+      }
+      if (legacy) {
+        manifestBody = legacy.body
+        this.activePrefix = legacy.prefix
+        this.responseIndex.clear()
+      }
+    }
     if (!manifestBody) return null
     let manifest: Manifest
     try { manifest = JSON.parse(manifestBody.toString('utf8')) as Manifest } catch { fail() }
@@ -266,7 +288,7 @@ export class UrlImportSeedCheckpoint {
     await Promise.all(Array.from({ length: Math.min(4, manifest.files.length) }, async () => {
       while (cursor < manifest.files.length) {
         const file = manifest.files[cursor++]!
-        const body = await this.read(`${this.prefix}/files/${file.sha256}`)
+        const body = await this.read(`${this.activePrefix}/files/${file.sha256}`)
         if (!body || body.length !== file.bytes || hash(body) !== file.sha256) fail()
         bytesByPath.set(file.path, body)
       }
