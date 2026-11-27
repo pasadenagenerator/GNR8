@@ -491,6 +491,7 @@ async function saveWorkingDomain(input:{workingDomain:string;ownershipSiteId:str
 }
 
 export async function POST(req: Request, ctx: { params: Promise<Params> }) {
+  let temporarySnapshotRoot: string | null = null
   try {
     const { clientId: rawClientId } = await ctx.params
     const clientId = normalizeUuid(rawClientId)
@@ -620,6 +621,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       siteId: preallocatedIdentity.siteId,
       siteVersionId: preallocatedIdentity.siteVersionId,
     })
+    temporarySnapshotRoot = snapshot.snapshotRootDirAbs
     if (restoredSnapshot) {
       diagnostics.push('SITE_IMPORT_SEED_CHECKPOINT_RESTORED')
     } else if (checkpoint && snapshot.importIntake?.ok) {
@@ -977,5 +979,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
 
     const message = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json({ ok: false, error: message, diagnostics: ['SITE_IMPORT_SITE_CREATE_FAILED'] }, { status: 500 })
+  } finally {
+    if (temporarySnapshotRoot) fs.rmSync(temporarySnapshotRoot, { recursive: true, force: true })
   }
 }

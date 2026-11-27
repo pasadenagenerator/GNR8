@@ -326,12 +326,17 @@ export class UrlImportSeedCheckpoint {
     const retainedPath = (absolute: string): string => path.relative(root, absolute).split(path.sep).join('/')
     if (!names.has(retainedPath(snapshot.entryHtmlPathAbs)) ||
       !names.has(retainedPath(snapshot.sourceSelection.selectedSourceHtmlPathAbs))) fail()
-    fs.rmSync(root, { recursive: true, force: true })
-    for (const file of manifest.files) {
-      if (file.path === '__snapshot.json') continue
-      const absolute = path.join(root, file.path)
-      fs.mkdirSync(path.dirname(absolute), { recursive: true })
-      fs.writeFileSync(absolute, bytesByPath.get(file.path)!)
+    try {
+      fs.rmSync(root, { recursive: true, force: true })
+      for (const file of manifest.files) {
+        if (file.path === '__snapshot.json') continue
+        const absolute = path.join(root, file.path)
+        fs.mkdirSync(path.dirname(absolute), { recursive: true })
+        fs.writeFileSync(absolute, bytesByPath.get(file.path)!)
+      }
+    } catch (error) {
+      fs.rmSync(root, { recursive: true, force: true })
+      throw error
     }
     return snapshot
   }
