@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { parse, parseFragment, serialize } from "parse5";
 import type { UrlImportSeedCheckpoint } from "../../site/url-import-seed-checkpoint";
-import { findProvablyUnusedCssDependencies } from "../../output-adapters/source-backed-css-dependency-analysis";
+import { collectHtmlSelectorEvidence, findProvablyUnusedCssDependencies } from "../../output-adapters/source-backed-css-dependency-analysis";
 
 import type { RenderedCaptureExecutor, RenderedCaptureResult } from "../../import-rendered-capture";
 import type { SemanticImportCaptureMode, SemanticImportResult } from "../../import-semantic/semantic-import-engine";
@@ -2939,6 +2939,8 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   );
   const provablyUnusedCssDependencies = new Map<string, string>();
   const requiredCssDependencyIdentities = new Set<string>();
+  const selectorEvidence = input.fullHtmlDocumentsForCssUsage
+    ? collectHtmlSelectorEvidence(input.fullHtmlDocumentsForCssUsage) : undefined;
   const markProvablyUnused = (css: string, stylesheetUrl: string): void => {
     if (!input.fullHtmlDocumentsForCssUsage) return;
     try {
@@ -2946,6 +2948,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         css,
         stylesheetUrl,
         htmlDocuments: input.fullHtmlDocumentsForCssUsage,
+        selectorEvidence,
       });
       const unusedIdentities = new Set(unused.map((dependency) => canonicalAdditionalPageAssetIdentity(dependency.resolvedUrl)));
       for (const rawRef of extractCssUrlCandidates(css)) {
