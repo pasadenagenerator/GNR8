@@ -18,6 +18,16 @@ import { computeRuntimeArtifactBundleSha256 } from '@/gnr8/runtime/astro-artifac
 import { applyContentOverridesToRawHtml, type ContentOverride, type ContentSlot } from '@/gnr8/runtime/content-binding'
 import { planBatchDraftUpserts } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers'
 
+test('discovery excludes malformed source hrefs without dropping valid routes or external URLs', () => {
+  const reason = __scopedImportPipelineTestUtils.malformedDiscoveryHrefReason
+  assert.equal(reason('European Charter for Researchers.'), 'prose_relative_href')
+  assert.equal(reason('/cgp/The%20European%20Code%20of%20Conduct%20for%20Research%20Integrity.'), 'prose_relative_href')
+  assert.equal(reason('www.ihps.si'), 'schemeless_external_host')
+  assert.equal(reason('/project/our-team'), null)
+  assert.equal(reason('/our team'), null)
+  assert.equal(reason('https://euraxess.ec.europa.eu/hrexcellenceaward/european-charter-researchers'), null)
+})
+
 test('Git-backed import rejects the retained CHS failure modes before archiving', () => {
   const snapshot = { fetchManifest: [{ fetchStatus: 'fetch_failed' }] } as any
   const discovery = {
@@ -1970,7 +1980,7 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
       entryAbs,
       `<!doctype html><html><body><header><nav>${topLevelRoutes
         .map((routePath) => `<a href="${routePath}">${routePath}</a>`)
-        .join('')}</nav></header></body></html>`,
+        .join('')}</nav></header><main><a href="European Charter for Researchers.">Charter</a><a href="www.ihps.si">IHPS</a></main></body></html>`,
       'utf8',
     )
 
@@ -2113,6 +2123,10 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
       assert.equal(assembledRoutes.includes(routePath), true, `${routePath} should be assembled`)
     }
     assert.deepEqual(skippedTopLevelRoutes, [])
+    assert.equal(multiPage.manifest.skippedLinks.some((entry: any) =>
+      entry.originalHref === 'European Charter for Researchers.' && entry.skippedReason === 'prose_relative_href'), true)
+    assert.equal(multiPage.manifest.skippedLinks.some((entry: any) =>
+      entry.originalHref === 'www.ihps.si' && entry.skippedReason === 'schemeless_external_host'), true)
     assert.equal(peakInFlightPages, 4)
 
     const firstArticleAcquisitionIndex = acquiredRoutes.findIndex((routePath: string) => routePath.startsWith('/b/'))

@@ -1116,6 +1116,18 @@ function mapNormalizationSkipReason(href: string, reason: string): string {
   return reason
 }
 
+function malformedDiscoveryHrefReason(href: string): string | null {
+  const raw = href.trim()
+  if (/^www\.[a-z0-9.-]+\.[a-z]{2,}(?:[/?#]|$)/i.test(raw)) return 'schemeless_external_host'
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(raw) && !raw.startsWith('//')) {
+    const leaf = raw.split(/[/?#]/).filter(Boolean).at(-1) ?? ''
+    let decodedLeaf = leaf
+    try { decodedLeaf = decodeURIComponent(leaf) } catch { /* Keep the original text. */ }
+    if (/\s/.test(decodedLeaf) && /\.$/.test(decodedLeaf)) return 'prose_relative_href'
+  }
+  return null
+}
+
 function isDiscoveryAuthPath(pathname: string): boolean {
   return /(^|\/)(login|log-in|signin|sign-in|signup|sign-up|auth|account|checkout)(\/|$)/i.test(pathname)
 }
@@ -1806,6 +1818,7 @@ async function acquireScopedMultiPageHtml(input: {
       {
         const refs = collectSeedDiscoveryRefs(body).filter((ref) => ref.sourceClassification === 'anchor' && !ref.download)
         for (const ref of refs.slice(0, input.option.limits.maxLinksPerPage)) {
+          if (malformedDiscoveryHrefReason(ref.href)) continue
           const absoluteUrl = resolveAbsoluteUrl(ref.href, finalUrl)
           if (resolveDiscoveryPreNormalizationSkip({ absoluteUrl, canonicalHost: normalizedSeed.canonicalHost })) continue
           const normalized = normalizeInternalHref({
@@ -2386,6 +2399,21 @@ async function buildScopedMultiPageDiscovery(input: {
           skippedReason: 'download',
         }),
       )
+      continue
+    }
+
+    const malformedHrefReason = malformedDiscoveryHrefReason(ref.href)
+    if (malformedHrefReason) {
+      skippedLinks.push(buildDiscoveryLinkEntry({
+        href: ref.href,
+        absoluteUrl,
+        normalizedUrl: null,
+        normalizedRoutePath: null,
+        sourceContext: ref.sourceContext,
+        sourceClassification: ref.sourceClassification,
+        status: 'skipped',
+        skippedReason: malformedHrefReason,
+      }))
       continue
     }
 
@@ -4740,4 +4768,5 @@ export const __scopedImportPipelineTestUtils = {
   buildCanonicalMigrationInputFromPipeline,
   inferPagePathFromSourcePath,
   gitCaptureIncompleteReasons,
+  malformedDiscoveryHrefReason,
 }
