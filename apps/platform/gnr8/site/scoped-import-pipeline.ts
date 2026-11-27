@@ -1494,7 +1494,8 @@ async function acquireScopedMultiPageHtml(input: {
   verifyCssUsage?: boolean
   approvedUnusedCssDependencies?: string[]
   pageCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadHtmlPage' | 'saveHtmlPage'> | null
-  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> | null
+  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> &
+    Partial<Pick<UrlImportSeedCheckpoint, 'hasAsset'>> | null
   pageBatchSize?: number
 }): Promise<{ summary: MultiPageHtmlAcquisitionSummary; manifest: MultiPageHtmlAcquisitionManifest | null }> {
   if (!input.option.acquireHtml) return { summary: disabledHtmlAcquisitionSummary(), manifest: null }
@@ -2184,7 +2185,8 @@ async function buildScopedMultiPageDiscovery(input: {
   approvedUnusedCssDependencies?: string[]
   requireCompleteCapture?: boolean
   pageCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadHtmlPage' | 'saveHtmlPage'> | null
-  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> | null
+  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> &
+    Partial<Pick<UrlImportSeedCheckpoint, 'hasAsset'>> | null
   pageBatchSize?: number
 }): Promise<{
   summary: MultiPageDiscoverySummary
@@ -3851,7 +3853,8 @@ export async function runScopedImportPipeline(input: {
   }
   multiPageDiscovery?: ScopedMultiPageDiscoveryOption
   pageCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadHtmlPage' | 'saveHtmlPage'> | null
-  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> | null
+  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> &
+    Partial<Pick<UrlImportSeedCheckpoint, 'hasAsset'>> | null
   pageBatchSize?: number
   deps?: Partial<ScopedImportPipelineDependencies>
 }): Promise<ScopedImportPipelineOutcome> {

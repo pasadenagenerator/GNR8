@@ -757,6 +757,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       } : checkpointReady ? checkpoint : null,
       assetCheckpoint: checkpointReady && checkpoint && !restoredSnapshot ? {
         loadAsset: async () => null,
+        hasAsset: async () => false,
         saveAsset: (url, asset) => checkpoint.saveAsset(url, asset),
       } : checkpointReady ? checkpoint : null,
     })

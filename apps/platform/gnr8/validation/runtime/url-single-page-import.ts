@@ -2890,10 +2890,12 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   approvedUnusedStylesheetDependencyUrls?: string[];
   /** Exact script URLs acquired as inert bytes for reviewed-hash validation. */
   retainedScriptDependencyUrls?: string[];
-  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> | null;
+  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> &
+    Partial<Pick<UrlImportSeedCheckpoint, 'hasAsset'>> | null;
   maxFreshAssetsPerRun?: number;
   fetchImpl?: FetchLike;
 }): Promise<AdditionalHtmlPageAssetCaptureResult> {
+  const startedAt = Date.now();
   const fetcher = input.fetchImpl ?? fetch;
   const diagnostics: UrlImportDiagnostic[] = [];
   const pageStates = input.pages.map((page) => {
@@ -3207,6 +3209,45 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   };
 
   const directUrls = [...refsByUrl.keys()].sort((left, right) => left.localeCompare(right));
+  const reportRequiredMissing = (): void => {
+    if (failedRequiredResources.size === 0) return;
+    console.error('[url-import] REQUIRED_CHILD_ASSETS_MISSING', {
+      count: failedRequiredResources.size,
+      sample: [...failedRequiredResources].sort((left, right) => left.localeCompare(right))
+        .slice(0, 12).map((url) => ({
+          urlSha256: crypto.createHash('sha256').update(url).digest('hex'),
+          host: new URL(url).host,
+          httpStatus: outcomeByUrl.get(url)?.httpStatus ?? null,
+          fetchStatus: outcomeByUrl.get(url)?.fetchStatus ?? null,
+        })),
+    });
+  };
+  if (input.assetCheckpoint?.hasAsset) {
+    const present = new Set<string>();
+    await mapWithBoundedConcurrency(directUrls, 8, async (url) => {
+      if (outcomeByUrl.get(url)?.fetchStatus === 'fetched' || await input.assetCheckpoint!.hasAsset!(url))
+        present.add(url);
+    });
+    const missing = directUrls.filter((url) => !present.has(url));
+    if (missing.length > maxFreshAssets) {
+      await mapWithBoundedConcurrency(missing.slice(0, maxFreshAssets), ADDITIONAL_PAGE_ASSET_CONCURRENCY,
+        async (url) => {
+          const exemplar = refsByUrl.get(url)?.[0];
+          if (exemplar) await fetchOne(url, exemplar.assetKind, exemplar.pageUrl);
+        });
+      if (assetCheckpointFailed) throw new Error('SITE_IMPORT_ASSET_CHECKPOINT_UNAVAILABLE');
+      if (failedRequiredResources.size > 0) {
+        reportRequiredMissing();
+        throw new Error('GITHUB_IMPORT_INCOMPLETE_CAPTURE:required_child_asset_missing');
+      }
+      const completedAssets = directUrls.filter((url) =>
+        present.has(url) || outcomeByUrl.get(url)?.fetchStatus === 'fetched').length;
+      console.info('[url-import] CHILD_ASSET_BATCH_CHECKPOINTED', {
+        completedAssets, discoveredAssets: directUrls.length, elapsedMs: Date.now() - startedAt,
+      });
+      throw new UrlImportAssetContinuationRequired(completedAssets, directUrls.length);
+    }
+  }
   if (input.assetCheckpoint) await mapWithBoundedConcurrency(directUrls, 8, async (url) => {
     if (outcomeByUrl.get(url)?.fetchStatus === 'fetched') return;
     const cached = await input.assetCheckpoint!.loadAsset(url);
@@ -3527,16 +3568,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const discoveredReferenceCount =
     pageResults.reduce((sum, page) => sum + page.discoveredReferenceCount, 0) + stylesheetDependencyUrls.size;
   const uniqueReferencedUrls = new Set([...refsByUrl.keys(), ...stylesheetDependencyUrls.keys()]);
-  if (failedRequiredResources.size > 0) console.error('[url-import] REQUIRED_CHILD_ASSETS_MISSING', {
-    count: failedRequiredResources.size,
-    sample: [...failedRequiredResources].sort((left, right) => left.localeCompare(right))
-      .slice(0, 12).map((url) => ({
-        urlSha256: crypto.createHash('sha256').update(url).digest('hex'),
-        host: new URL(url).host,
-        httpStatus: outcomeByUrl.get(url)?.httpStatus ?? null,
-        fetchStatus: outcomeByUrl.get(url)?.fetchStatus ?? null,
-      })),
-  });
+  reportRequiredMissing();
   if (deferredResources.size > 0) {
     if (assetCheckpointFailed) throw new Error('SITE_IMPORT_ASSET_CHECKPOINT_UNAVAILABLE');
     if (failedRequiredResources.size > 0) throw new Error('GITHUB_IMPORT_INCOMPLETE_CAPTURE:required_child_asset_missing');

@@ -277,6 +277,7 @@ test("default child asset batches stay bounded and resume from saved bytes", asy
   const saved = new Map<string, CachedImportHtmlPage>();
   const roots: string[] = [];
   let requests = 0;
+  let loaded = 0;
   const html = Array.from({ length: 17 }, (_, index) =>
     `<img src="https://example.com/${index}.png">`).join("");
   try {
@@ -287,7 +288,8 @@ test("default child asset batches stay bounded and resume from saved bytes", asy
         snapshotRootDirAbs: root,
         pages: [{ pageUrl: "https://example.com/about", bodyPath: path.join(root, "about.html"), html }],
         assetCheckpoint: {
-          loadAsset: async (url) => saved.get(url) ?? null,
+          hasAsset: async (url) => saved.has(url),
+          loadAsset: async (url) => { loaded += 1; return saved.get(url) ?? null; },
           saveAsset: async (url, asset) => { saved.set(url, asset); },
         },
         fetchImpl: async () => {
@@ -298,6 +300,7 @@ test("default child asset batches stay bounded and resume from saved bytes", asy
       if (step === 0) {
         await assert.rejects(capture, UrlImportAssetContinuationRequired);
         assert.equal(requests, 16);
+        assert.equal(loaded, 16);
       } else {
         assert.equal((await capture).summary.failedRequiredAssetCount, 0);
       }

@@ -191,6 +191,11 @@ export class UrlImportSeedCheckpoint {
     return this.loadResponse('assets', url)
   }
 
+  async hasAsset(url: string): Promise<boolean> {
+    const key = this.responseKey('assets', url)
+    return (await this.responseNames('assets')).has(key.slice(key.lastIndexOf('/') + 1))
+  }
+
   async save(snapshot: UrlSinglePageImportSnapshot): Promise<void> {
     const root = path.resolve(snapshot.snapshotRootDirAbs)
     const stableRoot = path.resolve(snapshot.snapshotStableRootDirAbs)

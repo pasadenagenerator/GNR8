@@ -136,6 +136,10 @@ test('seed capture is restored from private storage for the same import identity
     const assetUrl = 'https://example.com/logo.png'
     await checkpoint.saveAsset(assetUrl, { finalUrl: assetUrl, status: 200,
       redirected: false, contentType: 'image/png', bytes: Buffer.from([1, 2, 3]) })
+    const downloadsBeforePresenceCheck = downloads
+    assert.equal(await checkpoint.hasAsset(assetUrl), true)
+    assert.equal(await checkpoint.hasAsset('https://example.com/not-there.png'), false)
+    assert.equal(downloads, downloadsBeforePresenceCheck)
     assert.deepEqual((await checkpoint.loadAsset(assetUrl))?.bytes, Buffer.from([1, 2, 3]))
     assert.equal(await checkpoint.load('https://different.example.com/').then(() => false).catch(() => true), true)
     const imageObject = [...objects].find(([key, body]) => key.includes('/files/') && body.equals(Buffer.from([1, 2, 3])))
