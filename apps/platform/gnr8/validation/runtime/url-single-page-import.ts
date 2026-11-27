@@ -2923,7 +2923,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const cachedAssets = new Map<string, Awaited<ReturnType<UrlImportSeedCheckpoint['loadAsset']>>>();
   const deferredResources = new Set<string>();
   const maxFreshAssets = input.assetCheckpoint
-    ? Math.max(1, Math.min(512, Math.floor(input.maxFreshAssetsPerRun ?? 64))) : Number.POSITIVE_INFINITY;
+    ? Math.max(1, Math.min(512, Math.floor(input.maxFreshAssetsPerRun ?? 16))) : Number.POSITIVE_INFINITY;
   let freshAssets = 0;
   let assetCheckpointFailed = false;
   const usedPathToUrl = new Map<string, string>();
@@ -3332,15 +3332,16 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     }
   }
 
-  // Retry only interrupted transfers once more, sequentially, after the
-  // concurrent pass has finished. A real 4xx/5xx remains a required failure.
-  for (const [resolvedUrl, outcome] of outcomeByUrl) {
-    if (outcome.fetchStatus !== "fetch_failed" || outcome.httpStatus !== null) continue;
+  // Retry interrupted transfers with the same bounded concurrency as the
+  // first pass. Sequential retries can exhaust the hosted request deadline.
+  const interrupted = [...outcomeByUrl].filter(([, outcome]) =>
+    outcome.fetchStatus === "fetch_failed" && outcome.httpStatus === null);
+  await mapWithBoundedConcurrency(interrupted, ADDITIONAL_PAGE_ASSET_CONCURRENCY, async ([resolvedUrl]) => {
     const direct = refsByUrl.get(resolvedUrl)?.[0];
     const dependency = stylesheetDependencyUrls.get(resolvedUrl);
     if (direct) await fetchOne(resolvedUrl, direct.assetKind, direct.pageUrl);
     else if (dependency) await fetchOne(resolvedUrl, dependency.assetKind, dependency.pageUrl);
-  }
+  });
 
   // Child stylesheets are discovered after the seed manifest exists. A 404
   // dependency can only be omitted after the fetched CSS proves its selectors

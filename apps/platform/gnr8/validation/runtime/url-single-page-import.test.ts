@@ -273,6 +273,72 @@ test("child assets complete in bounded steps without refetching prior bytes", as
   }
 });
 
+test("default child asset batches stay bounded and resume from saved bytes", async () => {
+  const saved = new Map<string, CachedImportHtmlPage>();
+  const roots: string[] = [];
+  let requests = 0;
+  const html = Array.from({ length: 17 }, (_, index) =>
+    `<img src="https://example.com/${index}.png">`).join("");
+  try {
+    for (let step = 0; step < 2; step += 1) {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-default-step-"));
+      roots.push(root);
+      const capture = captureAssetsForAdditionalHtmlPages({
+        snapshotRootDirAbs: root,
+        pages: [{ pageUrl: "https://example.com/about", bodyPath: path.join(root, "about.html"), html }],
+        assetCheckpoint: {
+          loadAsset: async (url) => saved.get(url) ?? null,
+          saveAsset: async (url, asset) => { saved.set(url, asset); },
+        },
+        fetchImpl: async () => {
+          requests += 1;
+          return new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } });
+        },
+      });
+      if (step === 0) {
+        await assert.rejects(capture, UrlImportAssetContinuationRequired);
+        assert.equal(requests, 16);
+      } else {
+        assert.equal((await capture).summary.failedRequiredAssetCount, 0);
+      }
+    }
+    assert.equal(requests, 17);
+  } finally {
+    roots.forEach((root) => fs.rmSync(root, { recursive: true, force: true }));
+  }
+});
+
+test("interrupted child asset transfers retry with bounded concurrency", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-retry-"));
+  const attempts = new Map<string, number>();
+  let activeFinalRetries = 0;
+  let maximumFinalRetries = 0;
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [{ pageUrl: "https://example.com/about", bodyPath: path.join(root, "about.html"),
+        html: Array.from({ length: 5 }, (_, index) =>
+          `<img src="https://example.com/retry-${index}.png">`).join("") }],
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        const attempt = (attempts.get(url) ?? 0) + 1;
+        attempts.set(url, attempt);
+        if (attempt < 3) throw new Error("interrupted_transfer");
+        activeFinalRetries += 1;
+        maximumFinalRetries = Math.max(maximumFinalRetries, activeFinalRetries);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        activeFinalRetries -= 1;
+        return new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } });
+      },
+    });
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    assert.equal(result.summary.fetchedAssetCount, 5);
+    assert.ok(maximumFinalRetries > 1 && maximumFinalRetries <= 4);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("child asset continuation crosses the former 512-file boundary", async () => {
   const saved = new Map<string, CachedImportHtmlPage>();
   const roots: string[] = [];
