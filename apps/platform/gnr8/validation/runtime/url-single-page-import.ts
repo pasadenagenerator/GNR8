@@ -2126,7 +2126,11 @@ function collectAssetRefs(input: {
   function extractImageCandidatesFromDataReq(rawValue: string): string[] {
     const trimmed = rawValue.trim();
     if (!trimmed) return [];
-    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return [trimmed];
+    // CMS widgets also use data-req for a component name (for example
+    // data-req="image"). Only URL-like scalar values are asset references.
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+      return /[/.]/.test(trimmed) ? [trimmed] : [];
+    }
     try {
       const parsed = JSON.parse(trimmed) as unknown;
       const out = new Set<string>();

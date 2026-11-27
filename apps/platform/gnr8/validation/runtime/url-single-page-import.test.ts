@@ -210,6 +210,35 @@ test("child asset budget counts new transfers, not assets already retained by th
   }
 });
 
+test("child pages ignore CMS data-req component names but retain URL-like data-req images", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-data-req-"));
+  const requested: string[] = [];
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [
+        { pageUrl: "https://www.viroidoc.eu/partners", bodyPath: path.join(root, "partners.html"),
+          html: '<img src="/uploads/partner.webp" data-req="image">' },
+        { pageUrl: "https://www.viroidoc.eu/cgp/project-6-1-25", bodyPath: path.join(root, "project.html"),
+          html: '<img src="/uploads/project.webp" data-req="image"><img data-req="/uploads/extra.webp">' },
+      ],
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        requested.push(url);
+        return new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/webp" } });
+      },
+    });
+    assert.deepEqual(requested.sort(), [
+      "https://www.viroidoc.eu/uploads/extra.webp",
+      "https://www.viroidoc.eu/uploads/partner.webp",
+      "https://www.viroidoc.eu/uploads/project.webp",
+    ]);
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("child asset capture reuses verified bytes on a later import attempt", async () => {
   const roots = [0, 1].map(() => fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-asset-resume-")));
   const assetUrl = "https://example.com/logo.png";
