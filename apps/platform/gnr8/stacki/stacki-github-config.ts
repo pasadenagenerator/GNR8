@@ -27,6 +27,15 @@ export function configuredGitHubTarget(scope: StackiDraftScope) {
     throw new StackiDraftError(503, 'STACKI_GITHUB_NOT_CONFIGURED');
   return {...target, token};
 }
+/** Migrate an allowlisted legacy site to the same durable binding used by new sites. */
+export async function bindSelectedLegacyGitHubTarget(scope: StackiDraftScope,
+  client: SupabaseClient, transport: typeof fetch = fetch) {
+  if (!stackiGithubSelected(scope)) return null;
+  const target = configuredGitHubTarget(scope);
+  const ownerKind = await new GitHubStackiStore(scope, target, transport).verifiedOwnerKind();
+  return new SiteGitHubRepositoryBinding(client, transport).bindVerified(scope,
+    { ...target, ownerKind });
+}
 export function configuredGitHubStackiStore(scope: StackiDraftScope) {
   const target = configuredGitHubTarget(scope);
   return gitHubStore(scope,target);

@@ -1,6 +1,6 @@
 import { requirePublicOutputSite } from '@/gnr8/output-adapters/public-output-access';
 import { SiteGitHubRepositoryBinding } from '@/gnr8/stacki/site-github-repository-binding';
-import { configuredGitHubTarget, stackiGithubSelected } from '@/gnr8/stacki/stacki-github-config';
+import { bindSelectedLegacyGitHubTarget } from '@/gnr8/stacki/stacki-github-config';
 import { requireSameOriginJson, readBoundedJson } from '@/gnr8/stacki/stacki-draft-route-handlers';
 import { getSupabaseServiceRoleClient } from '@/src/supabase/service-role-server';
 import { inngest } from '@/gnr8/inngest/client';
@@ -29,11 +29,11 @@ export async function POST(request: Request, context: {
     const client = getSupabaseServiceRoleClient();
     if (!client) throw Error('native_studio_resource_reservation_store_unavailable');
     if (!await new SiteGitHubRepositoryBinding(client).readForPublication(scope)) {
-      const legacyScope = { ...scope, siteVersionId: scope.siteId };
-      if (!stackiGithubSelected(legacyScope))
+      const bound = await bindSelectedLegacyGitHubTarget(
+        { ...scope, siteVersionId: scope.siteId }, client);
+      if (!bound)
         throw Error('native_studio_resource_reservation_repository_missing');
-      configuredGitHubTarget(legacyScope);
-      // The Worker verifies this exact legacy target and writes its durable binding.
+      // The Worker reads the verified durable binding; no pilot env is needed there.
     }
     try {
       await inngest.send({ name: 'gnr8/native-studio.resources.reserve.requested',

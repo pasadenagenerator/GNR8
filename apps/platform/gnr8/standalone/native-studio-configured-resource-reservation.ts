@@ -6,8 +6,7 @@ import { SupabasePublicationStore } from './publication-store';
 import { ensureBoundCloudflareStudioDraftBucket } from './cloudflare-studio-draft-bucket';
 import { ensureBoundCloudflareNativeWorkerReservations } from './cloudflare-studio-worker-reservation';
 import { SiteGitHubRepositoryBinding } from '../stacki/site-github-repository-binding';
-import { configuredGitHubTarget, stackiGithubSelected } from '../stacki/stacki-github-config';
-import { GitHubStackiStore } from '../stacki/stacki-github-store';
+import { bindSelectedLegacyGitHubTarget } from '../stacki/stacki-github-config';
 
 type Environment = Record<string, string | undefined>;
 const HEX32 = /^[a-f0-9]{32}$/;
@@ -73,13 +72,10 @@ export async function readNativeStudioBootstrapTarget(scope: NativeStudioScope,
       !DOMAIN.test(site.data.domain))
     throw Error('native_studio_bootstrap_target_unverified');
   let repository = boundRepository;
-  if (!repository && reconcileLegacyBinding &&
-      stackiGithubSelected({ ...scope, siteVersionId: scope.siteId })) {
-    const target = configuredGitHubTarget({ ...scope, siteVersionId: scope.siteId });
-    const ownerKind = await new GitHubStackiStore(
-      { ...scope, siteVersionId: scope.siteId }, target, transport).verifiedOwnerKind();
-    repository = { ...await new SiteGitHubRepositoryBinding(client, transport).bindVerified(scope,
-      { ...target, ownerKind }), ownerKind };
+  if (!repository && reconcileLegacyBinding) {
+    await bindSelectedLegacyGitHubTarget({ ...scope, siteVersionId: scope.siteId },
+      client, transport);
+    repository = await new SiteGitHubRepositoryBinding(client).readForPublication(scope);
   }
   if (!repository)
     throw Error('native_studio_bootstrap_target_unverified');

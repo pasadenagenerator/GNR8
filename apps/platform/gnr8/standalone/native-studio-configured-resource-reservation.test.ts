@@ -140,6 +140,10 @@ test('bootstrap binds an allowlisted legacy import repository once before reserv
     { target: expected, draftBucket: draft, workers });
   assert.equal(binding?.github_owner_kind, 'User');
   assert.equal(JSON.stringify(binding).includes('local-test-token'), false);
+  delete process.env.GNR8_STACKI_GITHUB_ENABLED;
+  delete process.env.GNR8_STACKI_GITHUB_SITE_IDS;
+  delete process.env.GNR8_STACKI_GITHUB_TARGETS;
+  delete process.env.GNR8_STACKI_GITHUB_TOKEN;
   assert.deepEqual(await readNativeStudioBootstrapTarget(scope, client,
     valid.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID, transport), expected);
   assert.equal(writes, 1);
