@@ -49,6 +49,7 @@ function isMissing(error: unknown): boolean {
 export class UrlImportSeedCheckpoint {
   private readonly prefix: string
   private bucketPromise?: Promise<ReturnType<Storage['storage']['from']>>
+  private readonly responseIndex = new Map<'pages' | 'assets', Promise<Set<string>>>()
   constructor(
     private readonly client: Storage,
     private readonly bucketName: string,
@@ -110,6 +111,29 @@ export class UrlImportSeedCheckpoint {
     return `${this.prefix}/${kind}/${hash(Buffer.from(url))}`
   }
 
+  private async responseNames(kind: 'pages' | 'assets'): Promise<Set<string>> {
+    let index = this.responseIndex.get(kind)
+    if (!index) {
+      index = (async () => {
+        const bucket = await this.bucket()
+        const names = new Set<string>()
+        const folder = `${this.prefix}/${kind}`
+        for (let offset = 0; offset < 100_000; offset += 1_000) {
+          const result = await bucket.list(folder, { limit: 1_000, offset })
+          if (result.error || !result.data) fail()
+          for (const entry of result.data) {
+            if (!SHA256.test(entry.name)) fail()
+            names.add(entry.name)
+          }
+          if (result.data.length < 1_000) return names
+        }
+        fail()
+      })()
+      this.responseIndex.set(kind, index)
+    }
+    return index
+  }
+
   private async saveResponse(kind: 'pages' | 'assets', url: string, page: CachedImportHtmlPage): Promise<void> {
     const allowedStatus = page.status >= 200 && page.status < 300 ||
       kind === 'pages' && (page.status === 404 || page.status === 410)
@@ -123,11 +147,15 @@ export class UrlImportSeedCheckpoint {
     const prefix = Buffer.alloc(4)
     prefix.writeUInt32BE(header.length)
     await this.writeImmutable(this.responseKey(kind, url), Buffer.concat([prefix, header, page.bytes]))
+    if (this.responseIndex.has(kind)) (await this.responseNames(kind)).add(hash(Buffer.from(url)))
   }
 
   private async loadResponse(kind: 'pages' | 'assets', url: string): Promise<CachedImportHtmlPage | null> {
-    const body = await this.read(this.responseKey(kind, url))
-    if (!body) return null
+    const key = this.responseKey(kind, url)
+    const names = await this.responseNames(kind)
+    if (!names.has(key.slice(key.lastIndexOf('/') + 1))) return null
+    const body = await this.read(key)
+    if (!body) fail()
     if (body.length < 4) fail()
     const headerLength = body.readUInt32BE(0)
     if (headerLength > 8_192 || 4 + headerLength > body.length) fail()

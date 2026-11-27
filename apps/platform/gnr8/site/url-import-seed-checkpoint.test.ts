@@ -34,6 +34,8 @@ test('missing checkpoint is recognized through the real Supabase Storage downloa
 test('seed capture is restored from private storage for the same import identity', async () => {
   const objects = new Map<string, Buffer>()
   let rejectExisting = false
+  let downloads = 0
+  let assetLists = 0
   const storage = {
     getBucket: async () => ({ data: { public: false }, error: null }),
     from: () => ({
@@ -43,18 +45,20 @@ test('seed capture is restored from private storage for the same import identity
         return { error: null }
       },
       download: async (key: string) => {
+        downloads += 1
         const body = objects.get(key)
         return body && !rejectExisting
           ? { data: new Blob([new Uint8Array(body)]), error: null }
           : { data: null, error: { name: 'StorageUnknownError', message: '{}',
             originalError: { status: 400 } } }
       },
-      list: async (folder: string, options: { search: string }) => ({
-        data: [...objects.keys()].filter((key) => key.startsWith(`${folder}/`))
+      list: async (folder: string, options: { search?: string; offset?: number; limit?: number }) => {
+        if (folder.endsWith('/assets') && !options.search) assetLists += 1
+        return { data: [...objects.keys()].filter((key) => key.startsWith(`${folder}/`))
           .map((key) => ({ name: key.slice(folder.length + 1) }))
-          .filter((entry) => entry.name === options.search),
-        error: null,
-      }),
+          .filter((entry) => !options.search || entry.name === options.search)
+          .slice(options.offset ?? 0, (options.offset ?? 0) + (options.limit ?? 100)), error: null }
+      },
     }),
   }
   const identity = {
@@ -83,6 +87,12 @@ test('seed capture is restored from private storage for the same import identity
   try {
     assert.equal(await checkpoint.load(snapshot.sourceUrl), null)
     await checkpoint.save(snapshot)
+    const downloadsBeforeMissingAsset = downloads
+    assert.equal(await checkpoint.loadAsset('https://example.com/missing.png'), null)
+    assert.equal(await checkpoint.loadAsset('https://example.com/another-missing.png'), null)
+    assert.equal(downloads, downloadsBeforeMissingAsset)
+    assert.equal(assetLists, 1)
+    await assert.rejects(checkpoint.loadAsset('not-a-url'), /URL_IMPORT_SEED_CHECKPOINT_INVALID/)
     rejectExisting = true
     await assert.rejects(checkpoint.load(snapshot.sourceUrl), /URL_IMPORT_SEED_CHECKPOINT_INVALID/)
     rejectExisting = false

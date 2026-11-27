@@ -3190,7 +3190,8 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       failedRequiredResources.delete(resolvedUrl);
       deferredResources.delete(resolvedUrl);
     } catch (error) {
-      if (error instanceof Error && error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT') throw error;
+      if (error instanceof Error && (error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT' ||
+          error.message === 'URL_IMPORT_SEED_CHECKPOINT_INVALID')) throw error;
       if (attempt === 0) {
         await fetchOne(resolvedUrl, assetKind, pageUrl, 1);
         return;
@@ -3522,6 +3523,16 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const discoveredReferenceCount =
     pageResults.reduce((sum, page) => sum + page.discoveredReferenceCount, 0) + stylesheetDependencyUrls.size;
   const uniqueReferencedUrls = new Set([...refsByUrl.keys(), ...stylesheetDependencyUrls.keys()]);
+  if (failedRequiredResources.size > 0) console.error('[url-import] REQUIRED_CHILD_ASSETS_MISSING', {
+    count: failedRequiredResources.size,
+    sample: [...failedRequiredResources].sort((left, right) => left.localeCompare(right))
+      .slice(0, 12).map((url) => ({
+        urlSha256: crypto.createHash('sha256').update(url).digest('hex'),
+        host: new URL(url).host,
+        httpStatus: outcomeByUrl.get(url)?.httpStatus ?? null,
+        fetchStatus: outcomeByUrl.get(url)?.fetchStatus ?? null,
+      })),
+  });
   if (deferredResources.size > 0) {
     if (assetCheckpointFailed) throw new Error('SITE_IMPORT_ASSET_CHECKPOINT_UNAVAILABLE');
     if (failedRequiredResources.size > 0) throw new Error('GITHUB_IMPORT_INCOMPLETE_CAPTURE:required_child_asset_missing');
