@@ -55,6 +55,121 @@ test('retained Ladja capture replay',{skip:!process.env.GNR8_LADJA_CAPTURE_DIR},
   }catch(error){if(error instanceof SourceBackedAstroUnsupportedError){process.stderr.write(JSON.stringify({capabilities:error.unsupportedCapabilities,scripts:error.scriptEvidence})+'\n');}throw error;}
 });
 
+test('retained Aris capture replays into the Stacki Astro 7 source boundary',{skip:!process.env.GNR8_ARIS_CAPTURE_DIR},async()=>{
+  const dir=process.env.GNR8_ARIS_CAPTURE_DIR!;
+  const saved=JSON.parse(readFileSync(`${dir}/local-replay.json`,'utf8')) as {version:CanonicalSiteVersionSnapshot;raw:RawImportedSiteArtifact};
+  const root=`${dir}/raw-import/${saved.version.id}`;
+  const getRawAsset=async({filePath}:{filePath:string})=>{
+    const file=saved.raw.fileMap[filePath];
+    if(!file)return null;
+    const bytes=readFileSync(`${root}/${filePath}`);
+    const sha256=createHash('sha256').update(bytes).digest('hex');
+    assert.equal(sha256,file.sha256,filePath);
+    assert.equal(bytes.length,file.sizeBytes,filePath);
+    return {bytes,mediaType:file.mediaType,sha256,sizeBytes:bytes.length};
+  };
+  const source=await loadSourceBackedAstroGenerationSource({siteVersion:saved.version,rawArtifact:saved.raw,getRawAsset} as never);
+  const artifact={id:saved.version.artifactId,siteId:saved.version.siteId,siteVersionId:saved.version.id,bundleSha256:'0'.repeat(64)} as RuntimeArtifact;
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:saved.version,rawArtifact:saved.raw,artifact,
+    ...source,acceptedFunctionalReductions:{kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page'}});
+  assert.deepEqual(generated.outputPaths,['/','/apple','/canton']);
+  const rootPage=generated.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
+  assert.match(rootPage,/data-gnr8-rowgroup="auto-v1"/);
+  assert.match(rootPage,/data-gnr8-video-projected="youtube-click-v1"/);
+  assert.doesNotMatch(rootPage,/<iframe\b/i);
+  assert.doesNotMatch(rootPage,/b3798041fcff-rowgroup\.js|efd0e6abc2d9-iframe_api\.js/);
+  const {prepareStackiSourceProject,prepareStackiAstro7Baseline}=await import('../stacki/stacki-source-project');
+  const {createAstroStaticSiteSourceSnapshot}=await import('./astro-static-site-workspace-preparation');
+  const files=generated.sourceManifest.files.map(file=>({path:file.path,body:Buffer.from(file.contents)}));
+  const snapshot=createAstroStaticSiteSourceSnapshot(files);
+  const project=await prepareStackiSourceProject({workspace:generated.sourceManifest,assetMode:'runtime-overlay',
+    binding:{runtimeSiteId:saved.version.siteId,sourceSiteVersionId:saved.version.id,sourceArtifactId:artifact.id,
+      sourceSnapshotSha256:snapshot.aggregateSha256,requiredAssets:generated.contentManifest.requiredAssets},
+    readVerifiedAsset:async()=>{throw Error('unexpected retained asset read')}});
+  const baseline=prepareStackiAstro7Baseline({files:project.files,expectedSourceSnapshotSha256:snapshot.aggregateSha256});
+  const {exportStandaloneProject}=await import('../standalone/standalone-export');
+  const {rewriteRawTemplateCssForRuntime}=await import('../../src/public-site/raw-template-runtime');
+  const {retainedStylesheetSourceUrl}=await import('../validation/runtime/retained-css-dependency-path');
+  const prefix=`/api/gnr8/runtime/preview-assets/${saved.version.siteId}/${saved.version.id}/`;
+  const manifestPath='url-fetch-manifest.json';
+  const manifest=saved.raw.fileMap[manifestPath];
+  const manifestBytes=manifest?readFileSync(`${root}/${manifestPath}`):null;
+  const assets=(project.runtimeAssets??[]).map(asset=>{
+    const filePath=decodeURIComponent(asset.path.slice(prefix.length));
+    const bytes=readFileSync(`${root}/${filePath}`);
+    const css=asset.mediaType.split(';')[0]==='text/css'||filePath.endsWith('.css');
+    const sourceUrl=css&&manifest&&manifestBytes?retainedStylesheetSourceUrl({bytes:manifestBytes,
+      expectedSha256:manifest.sha256,expectedSizeBytes:manifest.sizeBytes,stylesheetPath:filePath}):null;
+    return {path:asset.path,sourceSha256:asset.sha256,mediaType:asset.mediaType,
+      body:css?Buffer.from(rewriteRawTemplateCssForRuntime({css:bytes.toString('utf8'),
+        siteId:saved.version.siteId,siteVersionId:saved.version.id,assetFilePath:filePath,
+        stylesheetSourceUrl:sourceUrl,versionCssUrls:true,
+        fileMapPaths:new Set(Object.keys(saved.raw.fileMap))})):bytes};
+  });
+  const exported=await exportStandaloneProject({baseline:baseline.files,
+    selection:{kind:'generated-source',scope:{agencyId:'11111111-1111-4111-8111-111111111111',
+      clientId:'22222222-2222-4222-8222-222222222222',siteId:'33333333-3333-4333-8333-333333333333',
+      siteVersionId:'44444444-4444-4444-8444-444444444444'},sha256:'a'.repeat(64)},
+    sourceArtifact:{id:'55555555-5555-4555-8555-555555555555',sha256:'b'.repeat(64)},assets});
+  assert.deepEqual(exported.manifest.routes,['/','/apple','/canton']);
+  if(process.env.STACKI_RELEASE_FILE){
+    const {persistVerifiedAstroStudio,readStoredVerifiedAstroStudio}=await import('../../../../scripts/stacki/prepare-from-confirmed-export.mjs');
+    const receipts=new Map<string,unknown>(),bytes=new Map<string,Buffer>();
+    const store={read:async (key:string)=>receipts.get(key)??null,
+      put:async(key:string,value:unknown)=>{receipts.set(key,value);return value;},
+      putBytes:async(hash:string,body:Buffer)=>{bytes.set(hash,body);},
+      getBytes:async (hash:string)=>bytes.get(hash)};
+    const nativeSite={siteId:'33333333-3333-4333-8333-333333333333',repository:'example/website',
+      repositoryId:'123',branch:'main',studioOrigin:'https://website.example.com',accountId:'a'.repeat(32),
+      appId:'456',installationId:'789',clientId:'Iv1.example'};
+    const native=await persistVerifiedAstroStudio({store,exported,selection:exported.manifest.selection,
+      confirmationSha256:'c'.repeat(64),releaseFile:process.env.STACKI_RELEASE_FILE,site:nativeSite});
+    assert(native.files.some(file=>file.path==='studio/scripts/workspace.ts'));
+    assert(native.files.some(file=>file.path==='src/lumos/components/Button.astro'));
+    assert(native.receipt.packs.length<12);
+    assert.equal(bytes.size,native.receipt.packs.length);
+    assert.deepEqual((await readStoredVerifiedAstroStudio({store,sourceId:native.receipt.identitySha256,
+      site:nativeSite})).files,native.files);
+  }
+  if(process.env.GNR8_ARIS_BUILD_ROOT){
+    const {prepareAstroStaticSiteSourceWorkspace}=await import('./astro-static-site-workspace-preparation');
+    const workspace=await prepareAstroStaticSiteSourceWorkspace({files:baseline.files.map(file=>({path:file.path,body:Buffer.from(file.base64,'base64')})),workspaceRoot:process.env.GNR8_ARIS_BUILD_ROOT});
+    process.stderr.write(`ARIS_LOCAL_WORKSPACE=${workspace.workspacePath}\n`);
+  }
+});
+
+test('built Aris routes satisfy the actual candidate registration resource policy',{skip:!process.env.GNR8_ARIS_BUILT_DIST},async()=>{
+  const dir=process.env.GNR8_ARIS_CAPTURE_DIR!;
+  const saved=JSON.parse(readFileSync(`${dir}/local-replay.json`,'utf8')) as {version:CanonicalSiteVersionSnapshot;raw:RawImportedSiteArtifact};
+  const rawRoot=`${dir}/raw-import/${saved.version.id}`;
+  const getRawAsset=async({filePath}:{filePath:string})=>{
+    const file=saved.raw.fileMap[filePath];if(!file)return null;
+    const bytes=readFileSync(`${rawRoot}/${filePath}`);
+    const sha256=createHash('sha256').update(bytes).digest('hex');
+    assert.equal(sha256,file.sha256,filePath);assert.equal(bytes.length,file.sizeBytes,filePath);
+    return {bytes,mediaType:file.mediaType,sha256,sizeBytes:bytes.length};
+  };
+  const source=await loadSourceBackedAstroGenerationSource({siteVersion:saved.version,rawArtifact:saved.raw,getRawAsset} as never);
+  const artifact={id:saved.version.artifactId,siteId:saved.version.siteId,siteVersionId:saved.version.id,bundleSha256:'0'.repeat(64)} as RuntimeArtifact;
+  const generated=createSourceBackedAstroGenerationInput({siteVersion:saved.version,rawArtifact:saved.raw,artifact,
+    ...source,acceptedFunctionalReductions:{kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page'}});
+  const {inspectAstroStaticExport}=await import('./astro-static-site-build-export-proof');
+  const {convertAstroExportToInternalPreviewCandidate}=await import('./astro-static-site-internal-preview-bridge');
+  const {createAstroStaticSiteSourceSnapshot}=await import('./astro-static-site-workspace-preparation');
+  const {createAstroProductionCandidateId,validateSelfContainedAstroProductionPayload}=await import('./astro-production-candidate-record');
+  const workspace=process.env.GNR8_ARIS_BUILT_DIST!.replace(/\/dist\/?$/,'');
+  assert.notEqual(workspace,process.env.GNR8_ARIS_BUILT_DIST);
+  const inspectedExport=await inspectAstroStaticExport(workspace,generated.verification);
+  const sourceSnapshot=createAstroStaticSiteSourceSnapshot(generated.sourceManifest.files.map(file=>({path:file.path,body:Buffer.from(file.contents)})));
+  const candidate=await convertAstroExportToInternalPreviewCandidate({inspectedExport,
+    candidateId:createAstroProductionCandidateId('11111111-1111-4111-8111-111111111111'),
+    siteId:saved.version.siteId,siteVersionId:'22222222-2222-4222-8222-222222222222',
+    rendererCompatibilityVersion:'gnr8-renderer-v1',sourceSnapshotSha256:sourceSnapshot.aggregateSha256,
+    ownedAssetFingerprints:generated.ownedAssetFingerprints,ownedStylesheetEvidence:source.ownedStylesheetEvidence});
+  assert.deepEqual(Object.keys(candidate.htmlByPath).sort(),['/','/apple','/canton']);
+  for(const html of Object.values(candidate.htmlByPath))validateSelfContainedAstroProductionPayload({html,compiledTokenStyles:candidate.compiledTokenStyles});
+});
+
 test('retained functions need a confirmed recipient only when a supported contact form exists',()=>{
   const noForm=fixture();
   const settings={kind:'retained-functions-v1' as const};
@@ -357,6 +472,27 @@ test("loads every captured route from the owned raw artifact when the runtime ar
   assert.ok(generated.sourceManifest.files.some((file) => file.path === "src/pages/about/index.astro"));
 });
 
+test("loads a single-page imported root from its verified entry HTML without a multi-page route map", async () => {
+  const input = fixture({ rootHtml: "<html><body><h1>Example Domain</h1></body></html>" });
+  input.version.pages = [page("/", "Home")];
+  input.version.importProvenanceSummary = {};
+  input.rawArtifact.metadata.multiPage = undefined;
+  const entry = input.rawArtifact.fileMap["index.html"]!;
+  const getRawAsset = async ({ filePath }: { filePath: string }) => filePath === "index.html"
+    ? { mediaType: entry.mediaType, sizeBytes: entry.sizeBytes, sha256: entry.sha256,
+      bytes: Buffer.from(input.artifact.htmlByPath["/"]!) } : null;
+  const htmlByPath = await loadSourceBackedAstroHtmlByPath({
+    siteVersion: input.version, rawArtifact: input.rawArtifact, getRawAsset,
+  });
+  assert.deepEqual(htmlByPath, { "/": input.artifact.htmlByPath["/"] });
+
+  input.rawArtifact.metadata.multiPage = { enabled: true, pageCount: 1,
+    routeMapRef: "importProvenanceSummary.multiPageDiscovery.rawArtifactAssembly" };
+  await assert.rejects(() => loadSourceBackedAstroHtmlByPath({
+    siteVersion: input.version, rawArtifact: input.rawArtifact, getRawAsset,
+  }), /source_route_lineage_missing:\//);
+});
+
 test("fails explicitly when any required captured route bytes are unavailable", async () => {
   const input = fixture();
   await assert.rejects(
@@ -565,6 +701,12 @@ test("uncaptured required routes and executable source behavior return explicit 
     () => createSourceBackedAstroGenerationInput({ siteVersion: scripted.version, artifact: scripted.artifact, rawArtifact: scripted.rawArtifact }),
     (error) => error instanceof SourceBackedAstroUnsupportedError && error.unsupportedCapabilities.includes("scripts"),
   );
+});
+
+test("uncaptured source PDF remains a working document link without treating it as a page", () => {
+  const input = fixture({ rootHtml: '<html><head><title>Home</title></head><body><a href="/uploads/CYPXw3ui/ARIS-GLSSLO.pdf?download=1#page=2">Document</a></body></html>' });
+  const result = createSourceBackedAstroGenerationInput({ siteVersion: input.version, artifact: input.artifact, rawArtifact: input.rawArtifact });
+  assert.deepEqual(result.content.navItems, [{ label: "Document", href: "https://example.com/uploads/CYPXw3ui/ARIS-GLSSLO.pdf?download=1#page=2" }]);
 });
 
 test("preserves page-limit omissions as disclosed source links while other uncaptured routes still fail", () => {
@@ -1261,6 +1403,40 @@ test('accepted source links preserve captured routes and source URL queries whil
  assert.equal(result.outputPaths.length,2)
  f.artifact.htmlByPath['/']+='<script>unknownRuntime()</script>'
  assert.throws(()=>createSourceBackedAstroGenerationInput({...input,acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError)
+})
+
+test('accepted source form link removes the obsolete form runtime after replacing a complex form',()=>{
+ const f=fixture({rootHtml:'<html><body><form><input type="checkbox" name="newsletter"><button>Send</button></form><script src="/assets/form.js"></script></body></html>'});
+ const result=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact,acceptedFunctionalReductions:{kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page',contact:{recipient:'approved@example.com',recipientConfirmed:true}}});
+ const root=result.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
+ assert.match(root,/Open original form/);
+ assert.doesNotMatch(root,/<form|form\.js/);
+})
+
+test('source-only scope keeps every form at its original page without inventing a contact recipient',()=>{
+ const f=fixture({rootHtml:'<html><body><form><input name="name" required><input type="email" name="email"><textarea name="message"></textarea><button>Send</button></form></body></html>'});
+ const result=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact,acceptedFunctionalReductions:{kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page'}});
+ const root=result.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
+ assert.match(root,/Open original form/);
+ assert.doesNotMatch(root,/data-gnr8-contact="v1"/);
+})
+
+test('source-linked Mono YouTube background loads only after a click without copying its runtime onto Astro',()=>{
+ const iframe='<iframe class="monovideobg" data-videotype="youtube" data-req="videobg,ext-//www.youtube.com/iframe_api" src="https://www.youtube.com/embed/gC6SF4WfdkM?controls=0&amp;enablejsapi=1&amp;playerapiid=player_r4795" title="air15"></iframe>';
+ const f=fixture({rootHtml:`<html><body><div class="rowvideobg">${iframe}</div><script src="/assets/videobg.js"></script><script src="//www.youtube.com/iframe_api"></script><script src="/assets/efd0e6abc2d9-iframe_api.js"></script><script src="/assets/www-widgetapi.js"></script></body></html>`});
+ f.rawArtifact.fileMap['assets/efd0e6abc2d9-iframe_api.js']={path:'assets/efd0e6abc2d9-iframe_api.js',mediaType:'application/javascript',sizeBytes:993,sha256:'a357639d2e67513615763390a305b30d143111c3074a8b120ff19d423d336ca6'};
+ const settings={kind:'retained-source-links-v1',uncapturedRoutes:'source',complexForms:'source-page'} as const;
+ const generated=createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact,acceptedFunctionalReductions:settings});
+ const root=generated.sourceManifest.files.find(file=>file.path==='src/pages/index.astro')!.contents;
+ assert.match(root,/data-gnr8-video-projected="youtube-click-v1"/);
+ assert.match(root,/controls=1/);
+ assert.match(root,/data-gnr8-play-youtube/);
+ assert.doesNotMatch(root,/<iframe\b/i);
+ assert.doesNotMatch(root,/enablejsapi|playerapiid|videobg\.js|iframe_api|www-widgetapi\.js/);
+ f.rawArtifact.fileMap['assets/efd0e6abc2d9-iframe_api.js']!.sha256='b'.repeat(64);
+ assert.throws(()=>createSourceBackedAstroGenerationInput({siteVersion:f.version,rawArtifact:f.rawArtifact,artifact:f.artifact,acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError);
+ const unknown=fixture({rootHtml:`<html><body>${iframe}<script src="/assets/unknown.js"></script></body></html>`});
+ assert.throws(()=>createSourceBackedAstroGenerationInput({siteVersion:unknown.version,rawArtifact:unknown.rawArtifact,artifact:unknown.artifact,acceptedFunctionalReductions:settings}),SourceBackedAstroUnsupportedError);
 })
 
 test('explicit tracking/chat omission preserves announcement and click-to-load video with owned controls',()=>{

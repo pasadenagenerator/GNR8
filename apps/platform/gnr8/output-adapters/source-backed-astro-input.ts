@@ -112,13 +112,17 @@ export async function loadSourceBackedAstroHtmlByPath(input: {
       importProvenanceSummary: input.siteVersion.importProvenanceSummary,
       routeMapServingEnabled: true,
     });
-    if (routeSource.outcome !== "selected") {
+    const singlePageRoot = path === "/" && routeSource.outcome === "disabled" &&
+      !input.rawArtifact.metadata.multiPage?.enabled;
+    if (routeSource.outcome !== "selected" && !singlePageRoot) {
       throw new SourceBackedAstroUnsupportedError([`source_route_lineage_missing:${path}`]);
     }
+    const rawFilePath = routeSource.outcome === "selected"
+      ? routeSource.rawFilePath : input.rawArtifact.entryHtmlPath;
     const asset = await input.getRawAsset({
       siteVersionId: input.siteVersion.id,
       artifactId: input.rawArtifact.id,
-      filePath: routeSource.rawFilePath,
+      filePath: rawFilePath,
     });
     if (!asset || asset.bytes.byteLength === 0) {
       throw new SourceBackedAstroUnsupportedError([`source_route_asset_missing:${path}`]);
@@ -126,7 +130,7 @@ export async function loadSourceBackedAstroHtmlByPath(input: {
     if (!/text\/html|application\/xhtml\+xml/i.test(asset.mediaType)) {
       throw new SourceBackedAstroUnsupportedError([`source_route_asset_invalid_mime:${path}`]);
     }
-    const expected = input.rawArtifact.fileMap[routeSource.rawFilePath];
+    const expected = input.rawArtifact.fileMap[rawFilePath];
     if (!expected || expected.sha256 !== asset.sha256 || expected.sizeBytes !== asset.sizeBytes) {
       throw new SourceBackedAstroUnsupportedError([`source_route_asset_identity_mismatch:${path}`]);
     }
@@ -466,10 +470,12 @@ export function createSourceBackedAstroGenerationInput(input: {
               ? "Recognized search is removed; maps become address links; the recognized consent/tracking bundle is removed together. Only supported ordinary contact forms are replaced by GNR8 forms. Sending requires server-side delivery and durable submission configuration; previews cannot send."
               : "Recognized search is removed; maps become address links; the recognized consent/tracking bundle is removed together. Contact forms remain unsupported.",
           ] : input.acceptedFunctionalReductions.kind === "retained-source-links-v1" ? [
-            "Uncaptured routes and unsupported forms open the corresponding original page. Supported ordinary contact forms use the explicitly confirmed GNR8 recipient; previews cannot send.",
+            input.acceptedFunctionalReductions.contact
+              ? "Uncaptured routes and unsupported forms open the corresponding original page. Supported ordinary contact forms use the explicitly confirmed GNR8 recipient; previews cannot send."
+              : "Uncaptured routes and all contact forms open the corresponding original page; generated pages do not send submissions.",
             ...(input.acceptedFunctionalReductions.trackingAndChat === 'remove' ? ['Recognized tracking, its consent controls and Facebook chat are omitted.'] : []),
             ...(input.acceptedFunctionalReductions.sourceMediaLinks?.length ? ['Explicitly selected large animations are displayed as labelled links to the original media, not embedded.'] : []),
-            'Recognized announcements and Wistia video use owned controls. Source parallax initialization is static; the original service worker is not installed on the generated host.',
+            'Recognized announcements, Wistia video and Mono rowgroups use owned controls. Recognized YouTube backgrounds retain their captured image and load the player only after a click. Source parallax initialization is static; the original service worker is not installed on the generated host.',
           ] : [
             `Legacy contact forms were replaced with disclosed mailto links to ${input.acceptedFunctionalReductions.contactEmail}.`,
             "Legacy comment forms were replaced with disclosed links to the corresponding source articles; no generated-page comment submission is provided.",
@@ -577,7 +583,7 @@ function normalizePage(input: {
   } else if (input.acceptedFunctionalReductions?.kind === "retained-source-links-v1") {
     let nativeForms = 0;
     for (const form of forms) {
-      if (forms.length === 1 && replaceSupportedContactForm(form,input.path)) {
+      if (input.acceptedFunctionalReductions.contact && forms.length === 1 && replaceSupportedContactForm(form,input.path)) {
         nativeForms++;
       } else {
         const sourceUrl = sourcePageUrlForRoute(input.rawArtifact,input.siteVersion.importProvenanceSummary,input.path);
@@ -675,10 +681,15 @@ function normalizePage(input: {
         retainedFunctions:!!input.retainedFunctions,
       })) ||
       isReplaceableStaticSiteScript(script, {
-        hasReplacedForms: replacedFormCount > 0 && input.acceptedFunctionalReductions?.kind === "legacy-forms-to-disclosed-links-v1",
+        hasReplacedForms: replacedFormCount > 0 && (
+          input.acceptedFunctionalReductions?.kind === "legacy-forms-to-disclosed-links-v1" ||
+          input.acceptedFunctionalReductions?.kind === "retained-source-links-v1"
+        ),
         replacedFormSecurityRuntime,
+        sourceLinked: input.acceptedFunctionalReductions?.kind === "retained-source-links-v1",
         elements,
         capturedPaths: new Set(Object.keys(input.rawArtifact.fileMap)),
+        capturedSha256: input.rawArtifact.fileMap[capturedScriptPath(script,input.rawArtifact) ?? '']?.sha256,
       })
     ) {
       detach(script);
@@ -981,7 +992,7 @@ function normalizeNavigationTarget(
     const route = normalizedPath === "/" ? "/" : normalizedPath;
     const localHost = url.hostname.replace(/^www\./, "") === sourceHost;
     if (!localHost) return /^https?:$/.test(url.protocol) ? url.toString() : "";
-    if (isFeedResourcePath(route)) return url.protocol === "https:" ? url.toString() : "";
+    if (isFeedResourcePath(route) || isSourceDocumentPath(route)) return url.protocol === "https:" ? url.toString() : "";
     const routeIdentity = canonicalRouteIdentity(route);
     const capturedRoute = knownRoutes.get(routeIdentity);
     if (!capturedRoute) {
@@ -1200,6 +1211,9 @@ function normalizeAstroOutputRoutePath(value: string): string {
 function isFeedResourcePath(value: string): boolean {
   return /(?:\.rss|\.atom)$/i.test(value);
 }
+function isSourceDocumentPath(value: string): boolean {
+  return /\.pdf$/i.test(value);
+}
 function materializeLazyAssetAttributes(elements: HtmlElement[]): void {
   for (const element of elements) {
     if (element.tagName !== "img" && element.tagName !== "source") continue;
@@ -1356,7 +1370,7 @@ function scriptAssetName(value: string): string {
 }
 function isReplaceableStaticSiteScript(
   script: HtmlElement,
-  context: { hasReplacedForms: boolean; replacedFormSecurityRuntime: boolean; elements: HtmlElement[]; capturedPaths: ReadonlySet<string> },
+  context: { hasReplacedForms: boolean; replacedFormSecurityRuntime: boolean; sourceLinked: boolean; elements: HtmlElement[]; capturedPaths: ReadonlySet<string>; capturedSha256?: string },
 ): boolean {
   if (attribute(script, "data-gnr8-raw-runtime-duplicate-guard") !== null) return true;
   if (attribute(script, "data-gnr8-disabled-preview-script") !== null) return true;
@@ -1396,8 +1410,13 @@ function isReplaceableStaticSiteScript(
   if (context.hasReplacedForms && (assetName === "form.js" || /hcaptcha\.com/i.test(src))) return true;
   if (context.replacedFormSecurityRuntime && assetName === "api.js") return true;
   if (assetName === "js.js" && context.elements.some((element) => element.tagName === "script" && /\bgtag\s*\(|\bdataLayer\b/i.test(textContent(element)))) return true;
+  const projectedYouTube = context.sourceLinked && context.elements.some((element) => element.tagName === "div" && attribute(element,"data-gnr8-video-projected") === "youtube-click-v1") &&
+    !context.elements.some((element) => (attribute(element,"data-req") ?? "").split(",").some(value => value === "videobg" || value === "ext-//www.youtube.com/iframe_api"));
+  if (projectedYouTube && ["videobg.js", "iframe_api", "www-widgetapi.js"].includes(assetName)) return true;
+  if (projectedYouTube && assetName === "iframe_api.js" &&
+      context.capturedSha256 === "a357639d2e67513615763390a305b30d143111c3074a8b120ff19d423d336ca6") return true;
   if (/serviceworker\.getregistrations|window\.assetsurl\s*=|\b_monoCookie\s*=|\bdataLayer\b|\bgtag\s*\(/i.test(body)) return true;
-  if (!context.capturedPaths.has("sw.js") &&
+  if ((context.sourceLinked || !context.capturedPaths.has("sw.js")) &&
       /^if\s*\(\s*['"]serviceWorker['"]\s+in\s+navigator\s*\)\s*\{\s*navigator\.serviceWorker\.register\(\s*['"]\/sw\.js(?:\?\d+)?['"]\s*,\s*\{\s*scope:\s*['"]\/['"]\s*\}\s*\);\s*\}$/.test(body)) return true;
   if (/createelement\s*\(\s*["']link["']\s*\)/i.test(lowerBody) && /rel\s*=\s*["']stylesheet["']/i.test(lowerBody)) return true;
   return false;

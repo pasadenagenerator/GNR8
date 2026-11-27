@@ -13,6 +13,7 @@ export function GeneratedOutputReviewAction(props: {
   contentManifestSha256: string;
   technicalEvaluationSha256: string;
   disabled: boolean;
+  approved?: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -65,7 +66,7 @@ export function GeneratedOutputReviewAction(props: {
           fontWeight: 800,
         }}
       >
-        {pending ? "Approving exact artifact…" : props.publicHost ? `Approve this exact artifact for publication at ${props.publicHost}` : "Approve this exact artifact for internal shadow publication"}
+        {pending ? "Preparing exact artifact…" : props.approved ? "Retry Stacki source preparation" : props.publicHost ? `Approve this exact artifact for publication at ${props.publicHost}` : "Approve this exact artifact for internal shadow publication"}
       </button>
       {result ? <pre role="status" style={{ margin: 0, padding: 12, overflow: "auto", background: "#f1f5f9", borderRadius: 8 }}>{JSON.stringify(result, null, 2)}</pre> : null}
     </section>

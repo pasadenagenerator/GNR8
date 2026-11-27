@@ -5,11 +5,13 @@ import path from "node:path";
 import test from "node:test";
 
 import type { RenderedCaptureWorkerClient } from "@/gnr8/import-rendered-capture-worker";
+import type { CachedImportHtmlPage } from "@/gnr8/site/url-import-seed-checkpoint";
 import { parseRenderedCaptureWorkerRequestDetailed } from "@/gnr8/import-rendered-capture-worker/worker-service";
 import {
   captureAssetsForAdditionalHtmlPages,
   computeLocalPathCandidate,
   importPublicSinglePageUrlToSnapshot,
+  UrlImportAssetContinuationRequired,
 } from "@/gnr8/validation/runtime/url-single-page-import";
 
 function validWoff2Fixture(): Uint8Array {
@@ -67,6 +69,36 @@ function makeHtmlResponse(html: string): Response {
     },
   });
 }
+
+test("url import fetches independent source assets with bounded concurrency", async () => {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-asset-concurrency-"));
+  const sourceUrl = "https://example.com/";
+  let inFlight = 0;
+  let peak = 0;
+  try {
+    const snapshot = await importPublicSinglePageUrlToSnapshot({
+      sourceUrl,
+      snapshotRootDirAbs: root,
+      requestId: "asset-concurrency",
+      renderedCaptureWorkerClient: unsupportedWorkerClient(),
+      fetchImpl: async (input) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url === sourceUrl) {
+          return makeHtmlResponse(`<!doctype html><html><body><main><h1>Assets</h1>${Array.from({ length: 6 }, (_, index) => `<img src="/image-${index}.png">`).join("")}</main></body></html>`);
+        }
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        inFlight -= 1;
+        return new Response(new Uint8Array([137, 80, 78, 71]), { headers: { "content-type": "image/png" } });
+      },
+    });
+    assert.equal(peak, 4);
+    assert.equal(snapshot.fetchManifest.filter((entry) => entry.fetchStatus === "fetched" && entry.assetKind === "image").length, 6);
+  } finally {
+    await fs.promises.rm(root, { recursive: true, force: true });
+  }
+});
 
 test("url import removes a MIME-proven false stylesheet role without losing the image", async () => {
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "gnr8-css-role-"));
@@ -138,6 +170,260 @@ test("url import keeps CSS references separate from HTML link identities and ret
     assert.ok(childCapture.manifestEntries.some((entry) => entry.resolvedUrl === `${sourceUrl}fonts/icons.woff2` && entry.fetchStatus === "fetched"));
   } finally {
     await fs.promises.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("child asset budget counts new transfers, not assets already retained by the seed", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-asset-budget-"));
+  const retainedUrl = "https://example.com/assets/000-retained.png";
+  const retainedPath = "assets/000-retained.png";
+  const newUrls = Array.from({ length: 512 }, (_, index) =>
+    `https://example.com/assets/${String(index + 1).padStart(3, "0")}.png`);
+  fs.mkdirSync(path.join(root, "assets"), { recursive: true });
+  fs.writeFileSync(path.join(root, retainedPath), new Uint8Array([1]));
+  const fetched = new Set<string>();
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [{
+        pageUrl: "https://example.com/about",
+        bodyPath: path.join(root, "about.html"),
+        html: [retainedUrl, ...newUrls].map((url) => `<img src="${url}">`).join(""),
+      }],
+      existingFetchManifest: [{
+        tag: "img", attribute: "src", occurrence: 0, rawRef: retainedUrl,
+        resolvedUrl: retainedUrl, localPath: retainedPath, assetKind: "image",
+        fetchStatus: "fetched", httpStatus: 200, contentType: "image/png", byteLength: 1,
+      }],
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        assert.notEqual(url, retainedUrl);
+        fetched.add(url);
+        return new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } });
+      },
+    });
+    assert.equal(fetched.size, newUrls.length);
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    assert.equal(result.pages[0]?.fetchedAssetCount, newUrls.length + 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("child pages ignore CMS data-req component names but retain URL-like data-req images", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-data-req-"));
+  const requested: string[] = [];
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [
+        { pageUrl: "https://www.viroidoc.eu/partners", bodyPath: path.join(root, "partners.html"),
+          html: '<img src="/uploads/partner.webp" data-req="image">' },
+        { pageUrl: "https://www.viroidoc.eu/cgp/project-6-1-25", bodyPath: path.join(root, "project.html"),
+          html: '<img src="/uploads/project.webp" data-req="image"><img data-req="/uploads/extra.webp">' },
+      ],
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        requested.push(url);
+        return new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/webp" } });
+      },
+    });
+    assert.deepEqual(requested.sort(), [
+      "https://www.viroidoc.eu/uploads/extra.webp",
+      "https://www.viroidoc.eu/uploads/partner.webp",
+      "https://www.viroidoc.eu/uploads/project.webp",
+    ]);
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("child capture retains a 13.46 MB source image within the shared asset limit", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-large-image-"));
+  const imageUrl = "https://www.viroidoc.eu/uploads/large-source.jpg";
+  const sourceBytes = new Uint8Array(13_459_935);
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [{ pageUrl: "https://www.viroidoc.eu/news", bodyPath: path.join(root, "news.html"),
+        html: `<img src="${imageUrl}">` }],
+      fetchImpl: async (request) => {
+        assert.equal(String(request instanceof Request ? request.url : request), imageUrl);
+        return new Response(sourceBytes, { headers: { "content-type": "image/jpeg" } });
+      },
+    });
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    const image = result.manifestEntries.find((entry) => entry.resolvedUrl === imageUrl);
+    assert.equal(image?.fetchStatus, "fetched");
+    assert.equal(image?.byteLength, sourceBytes.length);
+    assert.ok(image?.localPath && fs.statSync(path.join(root, image.localPath)).size === sourceBytes.length);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("child asset capture reuses verified bytes on a later import attempt", async () => {
+  const roots = [0, 1].map(() => fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-asset-resume-")));
+  const assetUrl = "https://example.com/logo.png";
+  const saved = new Map<string, CachedImportHtmlPage>();
+  const assetCheckpoint = {
+    loadAsset: async (url: string) => saved.get(url) ?? null,
+    saveAsset: async (url: string, asset: CachedImportHtmlPage) => { saved.set(url, asset); },
+  };
+  let sourceRequests = 0;
+  try {
+    for (const root of roots) {
+      const result = await captureAssetsForAdditionalHtmlPages({
+        snapshotRootDirAbs: root,
+        pages: [{ pageUrl: "https://example.com/about", bodyPath: path.join(root, "about.html"),
+          html: `<img src="${assetUrl}">` }],
+        assetCheckpoint,
+        fetchImpl: async () => {
+          sourceRequests += 1;
+          return new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/png" } });
+        },
+      });
+      assert.equal(result.summary.failedRequiredAssetCount, 0);
+      assert.equal(result.summary.fetchedAssetCount, 1);
+    }
+    assert.equal(sourceRequests, 1);
+    assert.deepEqual(saved.get(assetUrl)?.bytes, Buffer.from([1, 2, 3]));
+  } finally {
+    roots.forEach((root) => fs.rmSync(root, { recursive: true, force: true }));
+  }
+});
+
+test("child assets complete in bounded steps without refetching prior bytes", async () => {
+  const saved = new Map<string, CachedImportHtmlPage>();
+  const requests: string[] = [];
+  const assetCheckpoint = {
+    loadAsset: async (url: string) => saved.get(url) ?? null,
+    saveAsset: async (url: string, asset: CachedImportHtmlPage) => { saved.set(url, asset); },
+  };
+  const roots: string[] = [];
+  try {
+    for (let step = 0; step < 3; step += 1) {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-asset-step-"));
+      roots.push(root);
+      const capture = captureAssetsForAdditionalHtmlPages({
+        snapshotRootDirAbs: root,
+        pages: [{ pageUrl: "https://example.com/about", bodyPath: path.join(root, "about.html"),
+          html: [1, 2, 3].map((number) => `<img src="https://example.com/${number}.png">`).join("") }],
+        assetCheckpoint,
+        maxFreshAssetsPerRun: 1,
+        fetchImpl: async (request) => {
+          requests.push(String(request instanceof Request ? request.url : request));
+          return new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } });
+        },
+      });
+      if (step < 2) await assert.rejects(capture, UrlImportAssetContinuationRequired);
+      else assert.equal((await capture).summary.failedRequiredAssetCount, 0);
+    }
+    assert.deepEqual(requests, [1, 2, 3].map((number) => `https://example.com/${number}.png`));
+  } finally {
+    roots.forEach((root) => fs.rmSync(root, { recursive: true, force: true }));
+  }
+});
+
+test("default child asset batches stay bounded and resume from saved bytes", async () => {
+  const saved = new Map<string, CachedImportHtmlPage>();
+  const roots: string[] = [];
+  let requests = 0;
+  let loaded = 0;
+  const html = Array.from({ length: 17 }, (_, index) =>
+    `<img src="https://example.com/${index}.png">`).join("");
+  try {
+    for (let step = 0; step < 2; step += 1) {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-default-step-"));
+      roots.push(root);
+      const capture = captureAssetsForAdditionalHtmlPages({
+        snapshotRootDirAbs: root,
+        pages: [{ pageUrl: "https://example.com/about", bodyPath: path.join(root, "about.html"), html }],
+        assetCheckpoint: {
+          hasAsset: async (url) => saved.has(url),
+          loadAsset: async (url) => { loaded += 1; return saved.get(url) ?? null; },
+          saveAsset: async (url, asset) => { saved.set(url, asset); },
+        },
+        fetchImpl: async () => {
+          requests += 1;
+          return new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } });
+        },
+      });
+      if (step === 0) {
+        await assert.rejects(capture, UrlImportAssetContinuationRequired);
+        assert.equal(requests, 16);
+        assert.equal(loaded, 16);
+      } else {
+        assert.equal((await capture).summary.failedRequiredAssetCount, 0);
+      }
+    }
+    assert.equal(requests, 17);
+  } finally {
+    roots.forEach((root) => fs.rmSync(root, { recursive: true, force: true }));
+  }
+});
+
+test("interrupted child asset transfers retry with bounded concurrency", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-child-retry-"));
+  const attempts = new Map<string, number>();
+  let activeFinalRetries = 0;
+  let maximumFinalRetries = 0;
+  try {
+    const result = await captureAssetsForAdditionalHtmlPages({
+      snapshotRootDirAbs: root,
+      pages: [{ pageUrl: "https://example.com/about", bodyPath: path.join(root, "about.html"),
+        html: Array.from({ length: 5 }, (_, index) =>
+          `<img src="https://example.com/retry-${index}.png">`).join("") }],
+      fetchImpl: async (request) => {
+        const url = String(request instanceof Request ? request.url : request);
+        const attempt = (attempts.get(url) ?? 0) + 1;
+        attempts.set(url, attempt);
+        if (attempt < 3) throw new Error("interrupted_transfer");
+        activeFinalRetries += 1;
+        maximumFinalRetries = Math.max(maximumFinalRetries, activeFinalRetries);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        activeFinalRetries -= 1;
+        return new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } });
+      },
+    });
+    assert.equal(result.summary.failedRequiredAssetCount, 0);
+    assert.equal(result.summary.fetchedAssetCount, 5);
+    assert.ok(maximumFinalRetries > 1 && maximumFinalRetries <= 4);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("child asset continuation crosses the former 512-file boundary", async () => {
+  const saved = new Map<string, CachedImportHtmlPage>();
+  const roots: string[] = [];
+  let requests = 0;
+  const html = Array.from({ length: 513 }, (_, index) =>
+    `<img src="https://example.com/${String(index).padStart(3, "0")}.png">`).join("");
+  try {
+    for (let step = 0; step < 2; step += 1) {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "gnr8-asset-512-step-"));
+      roots.push(root);
+      const capture = captureAssetsForAdditionalHtmlPages({
+        snapshotRootDirAbs: root,
+        pages: [{ pageUrl: "https://example.com/about", bodyPath: path.join(root, "about.html"), html }],
+        assetCheckpoint: {
+          loadAsset: async (url) => saved.get(url) ?? null,
+          saveAsset: async (url, asset) => { saved.set(url, asset); },
+        },
+        maxFreshAssetsPerRun: 512,
+        fetchImpl: async () => {
+          requests += 1;
+          return new Response(new Uint8Array([1]), { headers: { "content-type": "image/png" } });
+        },
+      });
+      if (step === 0) await assert.rejects(capture, UrlImportAssetContinuationRequired);
+      else assert.equal((await capture).summary.failedRequiredAssetCount, 0);
+    }
+    assert.equal(requests, 513);
+  } finally {
+    roots.forEach((root) => fs.rmSync(root, { recursive: true, force: true }));
   }
 });
 

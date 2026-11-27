@@ -1,7 +1,7 @@
 import postcss from "postcss";
 import { parse } from "parse5";
 
-type HtmlSelectorEvidence = {
+export type HtmlSelectorEvidence = {
   classNames: ReadonlySet<string>;
   ids: ReadonlySet<string>;
 };
@@ -15,8 +15,9 @@ export function findProvablyUnusedCssDependencies(input: {
   css: string;
   stylesheetUrl: string;
   htmlDocuments: string[];
+  selectorEvidence?: HtmlSelectorEvidence;
 }): UnusedCssDependencyEvidence[] {
-  const evidence = collectHtmlSelectorEvidence(input.htmlDocuments);
+  const evidence = input.selectorEvidence ?? collectHtmlSelectorEvidence(input.htmlDocuments);
   const references = new Map<string, { required: boolean; selectors: Set<string> }>();
   const root = postcss.parse(input.css, { from: input.stylesheetUrl });
 
@@ -74,7 +75,7 @@ export function removeProvablyUnusedCssDependencyRules(input: {
   };
 }
 
-function collectHtmlSelectorEvidence(htmlDocuments: string[]): HtmlSelectorEvidence {
+export function collectHtmlSelectorEvidence(htmlDocuments: string[]): HtmlSelectorEvidence {
   const classNames = new Set<string>();
   const ids = new Set<string>();
   const visit = (node: unknown): void => {

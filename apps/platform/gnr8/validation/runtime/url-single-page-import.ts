@@ -4,7 +4,9 @@ import https from "node:https";
 import path from "node:path";
 
 import { parse, parseFragment, serialize } from "parse5";
-import { findProvablyUnusedCssDependencies } from "../../output-adapters/source-backed-css-dependency-analysis";
+import { MAX_RETAINED_ASSET_BYTES } from "../../site/retained-asset-limits";
+import type { UrlImportSeedCheckpoint } from "../../site/url-import-seed-checkpoint";
+import { collectHtmlSelectorEvidence, findProvablyUnusedCssDependencies } from "../../output-adapters/source-backed-css-dependency-analysis";
 
 import type { RenderedCaptureExecutor, RenderedCaptureResult } from "../../import-rendered-capture";
 import type { SemanticImportCaptureMode, SemanticImportResult } from "../../import-semantic/semantic-import-engine";
@@ -117,6 +119,7 @@ export type UrlImportDiagnosticCode =
   | "ASSET_REFERENCE_UNSUPPORTED"
   | "ASSET_URL_PARSE_FAILED"
   | "ASSET_FETCH_FAILED"
+  | "MULTIPAGE_ASSET_CHECKPOINT_UNAVAILABLE"
   | "ASSET_FETCH_NON_OK"
   | "RAW_IMPORT_HTML_IMAGE_CANDIDATE_FOUND"
   | "RAW_IMPORT_HTML_IMAGE_CANDIDATE_RESOLVED"
@@ -2124,7 +2127,11 @@ function collectAssetRefs(input: {
   function extractImageCandidatesFromDataReq(rawValue: string): string[] {
     const trimmed = rawValue.trim();
     if (!trimmed) return [];
-    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return [trimmed];
+    // CMS widgets also use data-req for a component name (for example
+    // data-req="image"). Only URL-like scalar values are asset references.
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+      return /[/.]/.test(trimmed) ? [trimmed] : [];
+    }
     try {
       const parsed = JSON.parse(trimmed) as unknown;
       const out = new Set<string>();
@@ -2749,9 +2756,16 @@ export type AdditionalHtmlPageAssetCaptureResult = {
 };
 
 const ADDITIONAL_PAGE_ASSET_MAX_COUNT = 512;
-const ADDITIONAL_PAGE_ASSET_MAX_BYTES = 12 * 1024 * 1024;
+const ADDITIONAL_PAGE_ASSET_MAX_BYTES = MAX_RETAINED_ASSET_BYTES;
 const ADDITIONAL_PAGE_ASSET_TIMEOUT_MS = 12_000;
 const ADDITIONAL_PAGE_ASSET_CONCURRENCY = 4;
+
+export class UrlImportAssetContinuationRequired extends Error {
+  constructor(readonly completedAssets: number, readonly discoveredAssets: number) {
+    super('SITE_IMPORT_ASSET_CONTINUATION_REQUIRED');
+    this.name = 'UrlImportAssetContinuationRequired';
+  }
+}
 
 async function fetchAssetBytesWithNodeFallback(input: {
   url: string;
@@ -2766,10 +2780,10 @@ async function fetchAssetBytesWithNodeFallback(input: {
   } catch (error) {
     const asset = new URL(input.url);
     const page = new URL(input.pageUrl);
-    if (!input.allowFallback || asset.protocol !== "https:" ||
+    if (input.init.signal?.aborted || !input.allowFallback || asset.protocol !== "https:" ||
         canonicalAssetHost(asset.hostname) !== canonicalAssetHost(page.hostname)) throw error;
     return new Promise((resolve, reject) => {
-      const request = https.get(asset, { headers: { "accept-encoding": "identity", accept: "image/*,text/css,*/*;q=0.8" } }, (incoming) => {
+      const request = https.get(asset, { signal: input.init.signal ?? undefined, headers: { "accept-encoding": "identity", accept: "image/*,text/css,*/*;q=0.8" } }, (incoming) => {
         const chunks: Buffer[] = [];
         let size = 0;
         incoming.on("data", (chunk: Buffer) => {
@@ -2793,7 +2807,8 @@ async function fetchAssetBytesWithNodeFallback(input: {
           });
         });
       });
-      request.setTimeout(ADDITIONAL_PAGE_ASSET_TIMEOUT_MS, () => request.destroy(new Error("asset_timeout")));
+      // Socket inactivity is not a total deadline: a server can trickle bytes
+      // indefinitely. The caller's signal bounds the whole fallback transfer.
       request.on("error", reject);
     });
   }
@@ -2880,8 +2895,12 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   approvedUnusedStylesheetDependencyUrls?: string[];
   /** Exact script URLs acquired as inert bytes for reviewed-hash validation. */
   retainedScriptDependencyUrls?: string[];
+  assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> &
+    Partial<Pick<UrlImportSeedCheckpoint, 'hasAsset'>> | null;
+  maxFreshAssetsPerRun?: number;
   fetchImpl?: FetchLike;
 }): Promise<AdditionalHtmlPageAssetCaptureResult> {
+  const startedAt = Date.now();
   const fetcher = input.fetchImpl ?? fetch;
   const diagnostics: UrlImportDiagnostic[] = [];
   const pageStates = input.pages.map((page) => {
@@ -2908,6 +2927,12 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   }
   const localPathByUrl = new Map<string, string>();
   const outcomeByUrl = new Map<string, FetchOutcome>();
+  const cachedAssets = new Map<string, Awaited<ReturnType<UrlImportSeedCheckpoint['loadAsset']>>>();
+  const deferredResources = new Set<string>();
+  const maxFreshAssets = input.assetCheckpoint
+    ? Math.max(1, Math.min(512, Math.floor(input.maxFreshAssetsPerRun ?? 16))) : Number.POSITIVE_INFINITY;
+  let freshAssets = 0;
+  let assetCheckpointFailed = false;
   const usedPathToUrl = new Map<string, string>();
   const representativeUrlByIdentity = new Map<string, string>();
   const aliasToRepresentativeUrl = new Map<string, string>();
@@ -2921,6 +2946,8 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   );
   const provablyUnusedCssDependencies = new Map<string, string>();
   const requiredCssDependencyIdentities = new Set<string>();
+  const selectorEvidence = input.fullHtmlDocumentsForCssUsage
+    ? collectHtmlSelectorEvidence(input.fullHtmlDocumentsForCssUsage) : undefined;
   const markProvablyUnused = (css: string, stylesheetUrl: string): void => {
     if (!input.fullHtmlDocumentsForCssUsage) return;
     try {
@@ -2928,6 +2955,7 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         css,
         stylesheetUrl,
         htmlDocuments: input.fullHtmlDocumentsForCssUsage,
+        selectorEvidence,
       });
       const unusedIdentities = new Set(unused.map((dependency) => canonicalAdditionalPageAssetIdentity(dependency.resolvedUrl)));
       for (const rawRef of extractCssUrlCandidates(css)) {
@@ -3082,7 +3110,17 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ADDITIONAL_PAGE_ASSET_TIMEOUT_MS);
     try {
-      const { response, bytes } = await fetchAssetBytesWithNodeFallback({
+      const cached = cachedAssets.get(resolvedUrl) ?? await input.assetCheckpoint?.loadAsset(resolvedUrl);
+      if (!cached && attempt === 0 && freshAssets >= maxFreshAssets) {
+        if (!failedRequiredResources.has(resolvedUrl)) deferredResources.add(resolvedUrl);
+        return;
+      }
+      if (!cached && attempt === 0) freshAssets += 1;
+      const { response, bytes } = cached ? {
+        response: { ok: true, status: cached.status, url: cached.finalUrl,
+          headers: new Headers(cached.contentType ? { 'content-type': cached.contentType } : {}) },
+        bytes: cached.bytes,
+      } : await fetchAssetBytesWithNodeFallback({
         url: resolvedUrl,
         pageUrl,
         fetcher,
@@ -3131,6 +3169,19 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         failedRequiredResources.add(resolvedUrl);
         return;
       }
+      if (!cached && input.assetCheckpoint) {
+        try {
+          await input.assetCheckpoint.saveAsset(resolvedUrl, {
+            finalUrl, status: response.status, redirected: finalUrl !== resolvedUrl,
+            contentType, bytes: Buffer.from(bytes),
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT') throw error;
+          assetCheckpointFailed = true;
+          diagnostics.push(createDiagnostic({ severity: 'warning', code: 'MULTIPAGE_ASSET_CHECKPOINT_UNAVAILABLE',
+            message: 'A fetched asset could not be cached for retry.', targetUrl: null, details: {} }));
+        }
+      }
       const absPath = path.resolve(input.snapshotRootDirAbs, localPath);
       const rootWithSeparator = `${path.resolve(input.snapshotRootDirAbs)}${path.sep}`;
       if (!absPath.startsWith(rootWithSeparator)) {
@@ -3147,7 +3198,10 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
         byteLength: bytes.byteLength,
       });
       failedRequiredResources.delete(resolvedUrl);
-    } catch {
+      deferredResources.delete(resolvedUrl);
+    } catch (error) {
+      if (error instanceof Error && (error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT' ||
+          error.message === 'URL_IMPORT_SEED_CHECKPOINT_INVALID')) throw error;
       if (attempt === 0) {
         await fetchOne(resolvedUrl, assetKind, pageUrl, 1);
         return;
@@ -3160,8 +3214,61 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   };
 
   const directUrls = [...refsByUrl.keys()].sort((left, right) => left.localeCompare(right));
-  const limitedDirectUrls = directUrls.slice(0, ADDITIONAL_PAGE_ASSET_MAX_COUNT);
-  for (const omitted of directUrls.slice(ADDITIONAL_PAGE_ASSET_MAX_COUNT)) failedRequiredResources.add(omitted);
+  const reportRequiredMissing = (): void => {
+    if (failedRequiredResources.size === 0) return;
+    console.error('[url-import] REQUIRED_CHILD_ASSETS_MISSING', {
+      count: failedRequiredResources.size,
+      sample: [...failedRequiredResources].sort((left, right) => left.localeCompare(right))
+        .slice(0, 12).map((url) => ({
+          urlSha256: crypto.createHash('sha256').update(url).digest('hex'),
+          host: new URL(url).host,
+          httpStatus: outcomeByUrl.get(url)?.httpStatus ?? null,
+          fetchStatus: outcomeByUrl.get(url)?.fetchStatus ?? null,
+        })),
+    });
+  };
+  if (input.assetCheckpoint?.hasAsset) {
+    const present = new Set<string>();
+    await mapWithBoundedConcurrency(directUrls, 8, async (url) => {
+      if (outcomeByUrl.get(url)?.fetchStatus === 'fetched' || await input.assetCheckpoint!.hasAsset!(url))
+        present.add(url);
+    });
+    const missing = directUrls.filter((url) => !present.has(url));
+    if (missing.length > maxFreshAssets) {
+      await mapWithBoundedConcurrency(missing.slice(0, maxFreshAssets), ADDITIONAL_PAGE_ASSET_CONCURRENCY,
+        async (url) => {
+          const exemplar = refsByUrl.get(url)?.[0];
+          if (exemplar) await fetchOne(url, exemplar.assetKind, exemplar.pageUrl);
+        });
+      if (assetCheckpointFailed) throw new Error('SITE_IMPORT_ASSET_CHECKPOINT_UNAVAILABLE');
+      if (failedRequiredResources.size > 0) {
+        reportRequiredMissing();
+        throw new Error('GITHUB_IMPORT_INCOMPLETE_CAPTURE:required_child_asset_missing');
+      }
+      const completedAssets = directUrls.filter((url) =>
+        present.has(url) || outcomeByUrl.get(url)?.fetchStatus === 'fetched').length;
+      console.info('[url-import] CHILD_ASSET_BATCH_CHECKPOINTED', {
+        completedAssets, discoveredAssets: directUrls.length, elapsedMs: Date.now() - startedAt,
+      });
+      throw new UrlImportAssetContinuationRequired(completedAssets, directUrls.length);
+    }
+  }
+  if (input.assetCheckpoint) await mapWithBoundedConcurrency(directUrls, 2, async (url) => {
+    if (outcomeByUrl.get(url)?.fetchStatus === 'fetched') return;
+    // The final pass reads every retained asset. Pace these downloads so a large
+    // site does not exhaust the storage API's burst limit near completion.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const cached = await input.assetCheckpoint!.loadAsset(url);
+    if (cached) cachedAssets.set(url, cached);
+  });
+  const needsFetch = (url: string): boolean =>
+    outcomeByUrl.get(url)?.fetchStatus !== "fetched" && !cachedAssets.has(url);
+  const newDirectUrls = directUrls.filter(needsFetch);
+  const selectedNewDirectUrls = new Set(newDirectUrls.slice(0, ADDITIONAL_PAGE_ASSET_MAX_COUNT));
+  const limitedDirectUrls = directUrls.filter((url) => !needsFetch(url) || selectedNewDirectUrls.has(url));
+  for (const omitted of newDirectUrls.slice(ADDITIONAL_PAGE_ASSET_MAX_COUNT)) {
+    (input.assetCheckpoint ? deferredResources : failedRequiredResources).add(omitted);
+  }
   await mapWithBoundedConcurrency(limitedDirectUrls, ADDITIONAL_PAGE_ASSET_CONCURRENCY, async (resolvedUrl) => {
     const exemplar = refsByUrl.get(resolvedUrl)?.[0];
     if (!exemplar) return;
@@ -3209,21 +3316,30 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       }
     }
   }
-  const remainingBudget = Math.max(0, ADDITIONAL_PAGE_ASSET_MAX_COUNT - limitedDirectUrls.length);
-  const limitedDependencies = [...stylesheetDependencyUrls.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .slice(0, remainingBudget);
-  for (const [omitted] of [...stylesheetDependencyUrls.entries()].slice(remainingBudget)) failedRequiredResources.add(omitted);
+  const remainingBudget = Math.max(0, ADDITIONAL_PAGE_ASSET_MAX_COUNT - selectedNewDirectUrls.size);
+  const sortedDependencies = [...stylesheetDependencyUrls.entries()]
+    .sort(([left], [right]) => left.localeCompare(right));
+  if (input.assetCheckpoint) await mapWithBoundedConcurrency(sortedDependencies, 8, async ([url]) => {
+    if (cachedAssets.has(url) || outcomeByUrl.get(url)?.fetchStatus === 'fetched') return;
+    const cached = await input.assetCheckpoint!.loadAsset(url);
+    if (cached) cachedAssets.set(url, cached);
+  });
+  const newDependencies = sortedDependencies.filter(([url]) => needsFetch(url));
+  const selectedNewDependencies = new Set(newDependencies.slice(0, remainingBudget).map(([url]) => url));
+  const limitedDependencies = sortedDependencies.filter(([url]) => !needsFetch(url) || selectedNewDependencies.has(url));
+  for (const [omitted] of newDependencies.slice(remainingBudget)) {
+    (input.assetCheckpoint ? deferredResources : failedRequiredResources).add(omitted);
+  }
   await mapWithBoundedConcurrency(limitedDependencies, ADDITIONAL_PAGE_ASSET_CONCURRENCY, async ([resolvedUrl, meta]) => {
     await fetchOne(resolvedUrl, meta.assetKind, meta.pageUrl);
   });
 
-  let acquiredCount = limitedDirectUrls.length + limitedDependencies.length;
+  let acquiredCount = selectedNewDirectUrls.size + selectedNewDependencies.size;
   const nestedQueue = limitedDependencies
     .filter(([resolvedUrl, meta]) => meta.assetKind === "stylesheet" && outcomeByUrl.get(resolvedUrl)?.fetchStatus === "fetched")
     .map(([resolvedUrl]) => resolvedUrl);
   const scannedStylesheets = new Set(stylesheetUrls);
-  while (nestedQueue.length > 0 && acquiredCount < ADDITIONAL_PAGE_ASSET_MAX_COUNT) {
+  while (nestedQueue.length > 0) {
     const stylesheetUrl = nestedQueue.shift()!;
     if (scannedStylesheets.has(stylesheetUrl)) continue;
     scannedStylesheets.add(stylesheetUrl);
@@ -3234,7 +3350,6 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     try { cssText = fs.readFileSync(path.resolve(input.snapshotRootDirAbs, localPath), "utf8"); } catch { continue; }
     markProvablyUnused(cssText, stylesheetUrl);
     for (const rawRef of extractCssUrlCandidates(cssText)) {
-      if (acquiredCount >= ADDITIONAL_PAGE_ASSET_MAX_COUNT) break;
       const resolvedUrl = retainedDependencyUrl(rawRef, localPath) ?? resolveAssetUrl({
         rawRef,
         baseUrl: new URL(stylesheetUrl),
@@ -3248,10 +3363,19 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
       const representative = representativeUrlByIdentity.get(identity) ?? resolvedUrl;
       representativeUrlByIdentity.set(identity, representative);
       aliasToRepresentativeUrl.set(resolvedUrl, representative);
+      if (input.assetCheckpoint && !cachedAssets.has(representative)) {
+        const cached = await input.assetCheckpoint.loadAsset(representative);
+        if (cached) cachedAssets.set(representative, cached);
+      }
+      if (!stylesheetDependencyUrls.has(representative) && needsFetch(representative) &&
+          acquiredCount >= ADDITIONAL_PAGE_ASSET_MAX_COUNT) {
+        (input.assetCheckpoint ? deferredResources : failedRequiredResources).add(representative);
+        continue;
+      }
       assignLocalPath(representative, assetKind);
       if (!stylesheetDependencyUrls.has(representative)) {
         stylesheetDependencyUrls.set(representative, { assetKind, pageUrl: stylesheetUrl, rawRef, resolvedUrl });
-        acquiredCount += 1;
+        if (needsFetch(representative)) acquiredCount += 1;
         await fetchOne(representative, assetKind, stylesheetUrl);
       }
       if (assetKind === "stylesheet" && outcomeByUrl.get(representative)?.fetchStatus === "fetched") {
@@ -3260,15 +3384,16 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
     }
   }
 
-  // Retry only interrupted transfers once more, sequentially, after the
-  // concurrent pass has finished. A real 4xx/5xx remains a required failure.
-  for (const [resolvedUrl, outcome] of outcomeByUrl) {
-    if (outcome.fetchStatus !== "fetch_failed" || outcome.httpStatus !== null) continue;
+  // Retry interrupted transfers with the same bounded concurrency as the
+  // first pass. Sequential retries can exhaust the hosted request deadline.
+  const interrupted = [...outcomeByUrl].filter(([, outcome]) =>
+    outcome.fetchStatus === "fetch_failed" && outcome.httpStatus === null);
+  await mapWithBoundedConcurrency(interrupted, ADDITIONAL_PAGE_ASSET_CONCURRENCY, async ([resolvedUrl]) => {
     const direct = refsByUrl.get(resolvedUrl)?.[0];
     const dependency = stylesheetDependencyUrls.get(resolvedUrl);
     if (direct) await fetchOne(resolvedUrl, direct.assetKind, direct.pageUrl);
     else if (dependency) await fetchOne(resolvedUrl, dependency.assetKind, dependency.pageUrl);
-  }
+  });
 
   // Child stylesheets are discovered after the seed manifest exists. A 404
   // dependency can only be omitted after the fetched CSS proves its selectors
@@ -3451,6 +3576,15 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const discoveredReferenceCount =
     pageResults.reduce((sum, page) => sum + page.discoveredReferenceCount, 0) + stylesheetDependencyUrls.size;
   const uniqueReferencedUrls = new Set([...refsByUrl.keys(), ...stylesheetDependencyUrls.keys()]);
+  reportRequiredMissing();
+  if (deferredResources.size > 0) {
+    if (assetCheckpointFailed) throw new Error('SITE_IMPORT_ASSET_CHECKPOINT_UNAVAILABLE');
+    if (failedRequiredResources.size > 0) throw new Error('GITHUB_IMPORT_INCOMPLETE_CAPTURE:required_child_asset_missing');
+    throw new UrlImportAssetContinuationRequired(
+      [...uniqueReferencedUrls].filter((url) => outcomeByUrl.get(url)?.fetchStatus === 'fetched').length,
+      uniqueReferencedUrls.size + [...deferredResources].filter((url) => !uniqueReferencedUrls.has(url)).length,
+    );
+  }
   const directReferenceCount = [...refsByUrl.values()].reduce((sum, refs) => sum + refs.length, 0);
   return {
     pages: pageResults,
@@ -4966,6 +5100,8 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
       messageLabel: "Direct asset fetch" | "Stylesheet-linked asset fetch",
       attempt = 0,
     ): Promise<FetchOutcome> {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ADDITIONAL_PAGE_ASSET_TIMEOUT_MS);
       const htmlImageRefs = htmlImageRefByUrl.get(resolvedUrl) ?? [];
       for (const ref of htmlImageRefs) {
         const entry = imageAssetDiscoveryEntries.get(ref.key);
@@ -4987,6 +5123,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           init: {
           method: "GET",
           cache: "no-store",
+          signal: controller.signal,
           headers: {
             accept: "text/css,text/javascript,application/javascript,image/*,*/*;q=0.8",
             "accept-encoding": "identity",
@@ -5066,7 +5203,7 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           byteLength: bytes.byteLength,
         };
       } catch (error) {
-        if (attempt === 0) return fetchAndStoreAsset(resolvedUrl, localPath, messageLabel, 1);
+        if (attempt === 0 && !controller.signal.aborted) return fetchAndStoreAsset(resolvedUrl, localPath, messageLabel, 1);
         if (htmlImageRefs.length > 0) {
           for (const ref of htmlImageRefs) {
             const entry = imageAssetDiscoveryEntries.get(ref.key);
@@ -5108,15 +5245,21 @@ export async function importPublicSinglePageUrlToSnapshot(input: {
           contentType: null,
           byteLength: null,
         };
+      } finally {
+        clearTimeout(timer);
       }
     }
 
-    for (const resolvedUrl of uniqueUrls) {
-      const localPath = localPathByUrl.get(resolvedUrl);
-      if (!localPath) continue;
-      const outcome = await fetchAndStoreAsset(resolvedUrl, localPath, "Direct asset fetch");
-      fetchOutcomeByUrl.set(resolvedUrl, outcome);
-    }
+    let nextAssetIndex = 0;
+    await Promise.all(Array.from({ length: Math.min(ADDITIONAL_PAGE_ASSET_CONCURRENCY, uniqueUrls.length) }, async () => {
+      while (nextAssetIndex < uniqueUrls.length) {
+        const resolvedUrl = uniqueUrls[nextAssetIndex++];
+        const localPath = localPathByUrl.get(resolvedUrl);
+        if (!localPath) continue;
+        const outcome = await fetchAndStoreAsset(resolvedUrl, localPath, "Direct asset fetch");
+        fetchOutcomeByUrl.set(resolvedUrl, outcome);
+      }
+    }));
 
     const selectedPrimaryStylesheetUrl = selectedPrimaryHeadStylesheetRef?.resolvedUrl ?? null;
     let selectedPrimaryStylesheetLocalPath: string | null = null;

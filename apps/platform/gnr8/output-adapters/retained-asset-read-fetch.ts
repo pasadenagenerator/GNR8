@@ -1,8 +1,9 @@
 import 'server-only';
+import { MAX_RETAINED_ASSET_BYTES } from '@/gnr8/site/retained-asset-limits';
 
 const tablePath = '/rest/v1/gnr8_runtime_raw_template_artifact_files';
 const projection = 'file_path,media_type,file_size_bytes,sha256,content_bytes';
-const maxBytes = 12 * 1024 * 1024;
+const maxBytes = MAX_RETAINED_ASSET_BYTES;
 
 /** Experimental only: the bounded hosted verification failed on 2026-10-26.
  * Not wired into publication composition; retained for local reproduction.

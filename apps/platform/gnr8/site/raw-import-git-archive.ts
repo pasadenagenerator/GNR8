@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
-import {pushStandaloneGit,readStandaloneGit} from '../standalone/publication-git';
+import {pushStandaloneGit,readStandaloneGit,RAW_IMPORT_GIT_MAX_BYTES} from '../standalone/publication-git';
+import {writeShardedRawImportArchive} from './raw-import-sharded-git';
 
 type Scope={agencyId:string;clientId:string;siteId:string};
 type File={path:string;mediaType:string;sizeBytes:number;sha256:string;bytes:Buffer};
@@ -9,20 +10,25 @@ type Archive={format:'gnr8-raw-import-git:v1';scope:Scope;runtimeSiteId:string;s
  files:Array<{path:string;mediaType:string;bytes:number;sha256:string}>};
 const hash=(body:Uint8Array)=>createHash('sha256').update(body).digest('hex');
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
-function invalid():never{throw Error('RAW_IMPORT_GIT_ARCHIVE_INVALID');}
+function invalid(reason:string):never{
+ console.error('[raw-import-git] ARCHIVE_VALIDATION_FAILED',{reason});
+ throw Error('RAW_IMPORT_GIT_ARCHIVE_INVALID');
+}
 function filePath(path:string){
- if(typeof path!=='string'||path.length>500||!path||path.includes('\\')||path.split('/').some(s=>!s||s==='.'||s==='..'||s==='.git'||s.startsWith('.gnr8')))invalid();
+ if(typeof path!=='string'||path.length>500||!path||path.includes('\\')||path.split('/').some(s=>!s||s==='.'||s==='..'||s==='.git'||s.startsWith('.gnr8')))invalid('file_path');
  return path;
 }
 export function rawImportGitPackage(input:{scope:Scope;runtimeSiteId:string;siteVersionId:string;files:File[]}){
  if(!Object.values(input.scope).every(v=>uuid.test(v))||!uuid.test(input.siteVersionId)||
-   !/^[A-Za-z0-9_-]{1,128}$/.test(input.runtimeSiteId)||input.files.length<1||input.files.length>10000)invalid();
+   !/^[A-Za-z0-9_-]{1,128}$/.test(input.runtimeSiteId)||input.files.length<1||input.files.length>10000)invalid('identity_or_file_count');
  const seen=new Set<string>();let total=0;
  const files=input.files.map(file=>{
   const path=filePath(file.path),key=path.normalize('NFC').toLowerCase();
-  if(seen.has(key)||!Buffer.isBuffer(file.bytes)||file.bytes.length!==file.sizeBytes||
-    hash(file.bytes)!==file.sha256||!/^[a-z0-9.+-]+\/[a-z0-9.+-]+(?:; charset=utf-8)?$/i.test(file.mediaType))invalid();
-  seen.add(key);total+=file.bytes.length;if(total>128*1024*1024)invalid();
+  if(seen.has(key))invalid('duplicate_path');
+  if(!Buffer.isBuffer(file.bytes)||file.bytes.length!==file.sizeBytes)invalid('file_size_mismatch');
+  if(hash(file.bytes)!==file.sha256)invalid('file_hash_mismatch');
+  if(!/^[a-z0-9.+-]+\/[a-z0-9.+-]+(?:; charset=utf-8)?$/i.test(file.mediaType))invalid('media_type');
+  seen.add(key);total+=file.bytes.length;if(total>RAW_IMPORT_GIT_MAX_BYTES)invalid('total_bytes_limit');
   return {path,mediaType:file.mediaType,bytes:file.sizeBytes,sha256:file.sha256};
  }).sort((a,b)=>a.path.localeCompare(b.path));
  const manifest:Archive={format:'gnr8-raw-import-git:v1',scope:input.scope,runtimeSiteId:input.runtimeSiteId,
@@ -39,20 +45,26 @@ export async function writeRawImportGitArchive(input:{scope:Scope;runtimeSiteId:
  files:File[];target:Target},deps:{
  repository:()=>Promise<{defaultBranch:string;parent:string;existingCommit?:string}>;
  push?:typeof pushStandaloneGit;read?:typeof readStandaloneGit;
-}):Promise<{repository:string;commit:string;manifestPath:string;manifestSha256:string;files:Archive['files']}>{
+}):Promise<{repository:string;commit:string;manifestPath:string;manifestSha256:string;
+ files:Archive['files'];archiveFormat?:'sharded-v1'}>{
  const {manifest,prefix,gitFiles,manifestSha256}=rawImportGitPackage(input);
  const {defaultBranch,parent,existingCommit}=await deps.repository();
- if(!/^[a-zA-Z0-9._/-]{1,100}$/.test(defaultBranch)||!/^[a-f0-9]{40}$/.test(parent))invalid();
+ if(!/^[a-zA-Z0-9._/-]{1,100}$/.test(defaultBranch)||!/^[a-f0-9]{40}$/.test(parent))invalid('repository_parent');
  const branch=`imports/${input.siteVersionId}`;
- if(existingCommit!==undefined&&!/^[a-f0-9]{40}$/.test(existingCommit))invalid();
+ if(existingCommit!==undefined&&!/^[a-f0-9]{40}$/.test(existingCommit))invalid('existing_commit');
+ if (manifest.files.reduce((sum,file)=>sum+file.bytes,0)>64*1024*1024) {
+  return writeShardedRawImportArchive({...input,parent,existingCommit});
+ }
  const commit=existingCommit??(await (deps.push??pushStandaloneGit)({owner:input.target.owner,repository:input.target.repository,
   defaultBranch,parent,ref:`heads/${branch}`,manifestSha256,files:gitFiles,token:input.target.token,
-  author:{name:'GNR8 Import',email:'import@gnr8.invalid'}})).commit;
+  author:{name:'GNR8 Import',email:'import@gnr8.invalid'}},fetch,
+  {maxBytes:RAW_IMPORT_GIT_MAX_BYTES,timeoutMs:300_000})).commit;
  const read=await (deps.read??readStandaloneGit)({owner:input.target.owner,repository:input.target.repository,
-  branch,commit,token:input.target.token});
+  branch,commit,token:input.target.token},fetch,
+  {maxBytes:RAW_IMPORT_GIT_MAX_BYTES,timeoutMs:180_000});
  if(read.commit!==commit||read.parent!==parent||read.parentCount!==1||
-   read.files.size!==gitFiles.length||[...read.files.keys()].some(path=>!gitFiles.some(f=>f.path===path)))invalid();
- for(const file of gitFiles)if(!read.files.get(file.path)?.equals(file.body))invalid();
+   read.files.size!==gitFiles.length||[...read.files.keys()].some(path=>!gitFiles.some(f=>f.path===path)))invalid('readback_structure');
+ for(const file of gitFiles)if(!read.files.get(file.path)?.equals(file.body))invalid('readback_content');
  return {repository:`${input.target.owner}/${input.target.repository}`,commit,
   manifestPath:prefix+'.gnr8-import-manifest.json',manifestSha256,files:manifest.files};
 }

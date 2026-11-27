@@ -1,0 +1,166 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { configuredNativeStudioImageBuild } from './native-studio-configured-image-build';
+
+const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
+  clientId: '22222222-2222-4222-8222-222222222222',
+  siteId: '33333333-3333-4333-8333-333333333333' };
+const sourceId = 'a'.repeat(64), sourceCommit = 'b'.repeat(40),
+  workerId = 'c'.repeat(32), accountId = 'd'.repeat(32);
+const site = { siteId: scope.siteId, accountId,
+  repository: 'example/site', repositoryId: '42',
+  branch: 'codex/native-stacki', studioOrigin: 'https://site.example.com',
+  appId: '456', installationId: '789', clientId: 'Iv1.example' };
+const input = { scope, client: {} as SupabaseClient, sourceId,
+  sourceCommit, workerId };
+const env = { GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED: '1',
+  GNR8_NATIVE_STUDIO_IMAGE_BUILD_SNAPSHOT: 'snap_build',
+  GNR8_NATIVE_STUDIO_IMAGE_PUSH_SNAPSHOT: 'snap_push',
+  GNR8_NATIVE_STUDIO_IMAGE_BUILD_SANDBOX_TIMEOUT_MS: String(60 * 60_000),
+  GNR8_NATIVE_STUDIO_IMAGE_BUILD_NETWORK_HOSTS:
+    'registry-1.docker.io,auth.docker.io,production.cloudfront.docker.com' };
+
+function fixture() {
+  const events: string[] = [];
+  const records = new Map<string, unknown>();
+  records.set('native-studio/resources-reserved-v1.json', {
+    target: { accountId, repository: site.repository,
+      repositoryId: site.repositoryId, studioOrigin: site.studioOrigin },
+    workers: { studio: { id: workerId }, publicSite: {
+      id: 'e'.repeat(32), worker: `gnr8-${scope.siteId}-site` } } });
+  const store = { read: async (key: string) => records.get(key) ?? null,
+    claim: async () => true };
+  const files = [{ path: 'studio/Dockerfile', body: Buffer.from('trusted') }];
+  const progress = { state: 'running' };
+  const deps = {
+    site: async () => { events.push('site'); return site; },
+    store: () => store,
+    snapshot: async ({ snapshotId }: { snapshotId: string }) => {
+      events.push(`snapshot:${snapshotId}`); return { status: 'created' }; },
+    source: async ({ store: actual, sourceId: id, site: target }: any) => {
+      events.push('source'); assert.equal(actual, store);
+      assert.equal(id, sourceId); assert.equal(target, site);
+      return { files };
+    },
+    restoreOutputs: async () => ({ artifactDir: '/tmp', files: [],
+      cleanup: async () => {} }),
+    recordPreflight: async (value: any) => {
+      events.push('record-preflight');
+      assert.equal(value.project, undefined);
+      assert.equal(value.store, store);
+      assert.equal(value.sourceId, sourceId);
+      assert.equal(value.commit, sourceCommit);
+      assert.equal(value.buildSnapshotId, 'snap_build');
+      assert.equal(value.cloudflareCredential, undefined);
+    },
+    advance: async (value: any) => {
+      events.push('advance');
+      assert.deepEqual(value.buildNetworkPolicy, {
+        allow: ['registry-1.docker.io', 'auth.docker.io',
+          'production.cloudfront.docker.com'] });
+      assert.equal(value.store, store);
+      assert.equal(value.commit, sourceCommit);
+      assert.equal(value.buildSnapshotId, 'snap_build');
+      assert.equal(value.pushSnapshotId, 'snap_push');
+      assert.deepEqual(value.files, files);
+      assert.equal(value.publicWorkerId, 'e'.repeat(32));
+      assert.equal(value.commit, sourceCommit);
+      assert.equal(value.sandboxTimeoutMs, 60 * 60_000);
+      return progress;
+    },
+  } as any;
+  return { deps, events, progress, records };
+}
+
+test('only verified stored source bytes reach the isolated build phase', async () => {
+  const f = fixture();
+  assert.equal(await configuredNativeStudioImageBuild(input, env,
+    (async () => { throw Error('provider call'); }) as typeof fetch, f.deps),
+  f.progress);
+  assert.deepEqual(f.events, ['site', 'snapshot:snap_build',
+    'snapshot:snap_push', 'source', 'advance']);
+});
+
+test('completed isolated image build records preflight before returning success', async () => {
+  const f = fixture();
+  f.progress.state = 'complete';
+  assert.equal(await configuredNativeStudioImageBuild(input, env, fetch,
+    f.deps), f.progress);
+  assert.deepEqual(f.events, ['site', 'snapshot:snap_build',
+    'snapshot:snap_push', 'source', 'advance', 'record-preflight']);
+});
+
+test('unconfigured switch or unsafe network fails before site read', async () => {
+  const f = fixture();
+  await assert.rejects(configuredNativeStudioImageBuild(input,
+    { ...env, GNR8_NATIVE_STUDIO_IMAGE_BUILD_ENABLED: '0' },
+    fetch, f.deps), /not_configured/);
+  await assert.rejects(configuredNativeStudioImageBuild(input,
+    { ...env, GNR8_NATIVE_STUDIO_IMAGE_BUILD_NETWORK_HOSTS: '*.example.com' },
+    fetch, f.deps), /network_unconfigured/);
+  assert.deepEqual(f.events, []);
+});
+
+test('credential-free unrestricted image build is limited to Preview', async () => {
+  const blocked = fixture();
+  await assert.rejects(configuredNativeStudioImageBuild(input,
+    { ...env, VERCEL_ENV: 'production',
+      GNR8_NATIVE_STUDIO_IMAGE_BUILD_EGRESS_MODE: 'preview-unrestricted' },
+    fetch, blocked.deps), /network_unconfigured/);
+  assert.deepEqual(blocked.events, []);
+  const preview = fixture();
+  preview.deps.advance = async (value: any) => {
+    assert.equal(value.buildNetworkPolicy, 'allow-all');
+    assert.equal(value.allowUnrestrictedBuildNetwork, true);
+    return preview.progress;
+  };
+  assert.equal(await configuredNativeStudioImageBuild(input,
+    { ...env, VERCEL_ENV: 'preview',
+      GNR8_NATIVE_STUDIO_IMAGE_BUILD_EGRESS_MODE: 'preview-unrestricted' },
+    fetch, preview.deps), preview.progress);
+});
+
+test('one verified bundle is staged at both Studio and public Worker paths', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'gnr8-image-dist-'));
+  try {
+    await mkdir(join(temp, 'dist'));
+    await writeFile(join(temp, 'dist', 'worker.mjs'), 'verified bundle');
+    const f = fixture();
+    f.deps.restoreOutputs = async () => ({ artifactDir: temp,
+      files: [{ path: 'dist/worker.mjs' }], cleanup: async () => {} });
+    f.deps.advance = async (value: any) => {
+      assert.deepEqual(value.files.filter((file: { path: string }) =>
+        file.path.endsWith('dist/worker.mjs')).map((file: { path: string }) =>
+        file.path).sort(), ['dist/worker.mjs', 'studio/dist/worker.mjs']);
+      return f.progress;
+    };
+    await configuredNativeStudioImageBuild(input, env, fetch, f.deps);
+  } finally { await rm(temp, { recursive: true, force: true }); }
+});
+
+test('expired snapshot or mismatched reservation blocks source read', async () => {
+  const expired = fixture();
+  expired.deps.snapshot = async () => ({ status: 'created', expiresAt: new Date(0) });
+  await assert.rejects(configuredNativeStudioImageBuild(input, env, fetch,
+    expired.deps), /snapshot_unavailable/);
+  assert.equal(expired.events.includes('source'), false);
+  const changed = fixture();
+  changed.records.set('native-studio/resources-reserved-v1.json', {
+    target: { accountId: 'f'.repeat(32) }, workers: { publicSite: {
+      id: 'e'.repeat(32), worker: `gnr8-${scope.siteId}-site` } } });
+  await assert.rejects(configuredNativeStudioImageBuild(input, env, fetch,
+    changed.deps), /public_target_unverified/);
+});
+
+test('an existing private attempt resumes without a new snapshot TTL gate', async () => {
+  const f = fixture();
+  f.records.set('native-studio/image-drive-attempt-v2.json', { scoped: true });
+  f.deps.snapshot = async () => { throw Error('snapshot expired'); };
+  assert.deepEqual(await configuredNativeStudioImageBuild(input, env, fetch,
+    f.deps), f.progress);
+  assert.deepEqual(f.events, ['site', 'source', 'advance']);
+});

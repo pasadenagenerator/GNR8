@@ -1,0 +1,204 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { CloudflarePublishTokenProvider } from './cloudflare-publish-token-provider';
+import { ensureNativeStudioPublishToken } from './native-studio-publish-token-issuer';
+import { installNativeStudioRuntimeSecrets } from './native-studio-secret-installation';
+
+const scope = { agencyId: '11111111-1111-4111-8111-111111111111',
+  clientId: '22222222-2222-4222-8222-222222222222',
+  siteId: '33333333-3333-4333-8333-333333333333' };
+const accountId = 'a'.repeat(32);
+const zoneId = 'b'.repeat(32);
+const workerId = 'c'.repeat(32);
+const tokenId = 'd'.repeat(32);
+const legacyTokenId = 'e'.repeat(32);
+const manager = 'cfat_' + 'M'.repeat(45);
+const workerReader = 'cfat_' + 'W'.repeat(45);
+const value = 'cfat_' + 'V'.repeat(45);
+const name = `gnr8-${scope.siteId}-native-publish-v2`;
+const worker = `gnr8-${scope.siteId}-site`;
+const routesId = '28f4b596e7d643029c524985477ae49a';
+const editorId = '7e79ec33834341f28dd431ab73884400';
+const oldVersion = '44444444-4444-4444-8444-444444444444';
+const newVersion = '55555555-5555-4555-8555-555555555555';
+const secretNames = ['AI_API_KEY', 'CONTAINER_TOKEN', 'GITHUB_CLIENT_SECRET',
+  'GITHUB_PRIVATE_KEY', 'PUBLISH_CLOUDFLARE_API_TOKEN', 'SESSION_SECRET'];
+
+function fixture(extraPolicy = false, legacyPresent = false,
+  restrictions: Record<string, unknown> = {}) {
+  const saved = new Map<string, unknown>();
+  const store = {
+    read: async <T>(key: string) => (saved.get(key) as T) ?? null,
+    claim: async (key: string, data: unknown) => {
+      if (saved.has(key)) return false;
+      saved.set(key, data);
+      return true;
+    },
+  };
+  let policies: any[] | null = null;
+  let creates = 0;
+  let patches = 0;
+  let installedToken = '';
+  const requests: { path: string; method: string; authorization: string }[] = [];
+  const transport = (async (url: string, init: RequestInit) => {
+    const path = new URL(url).pathname + new URL(url).search;
+    const method = init.method ?? 'GET';
+    const authorization = new Headers(init.headers).get('authorization') ?? '';
+    requests.push({ path, method, authorization });
+    if (path === `/client/v4/accounts/${accountId}/workers/workers/${worker}`) {
+      assert.equal(authorization, `Bearer ${workerReader}`);
+      return Response.json({ success: true, result: { id: workerId, name: worker } });
+    }
+    if (path === `/client/v4/accounts/${accountId}/tokens?page=1&per_page=50`) {
+      assert.equal(authorization, `Bearer ${manager}`);
+      return Response.json({ success: true,
+        result: [...(legacyPresent ? [{ id: legacyTokenId,
+          name: `gnr8-${scope.siteId}-native-publish` }] : []),
+        ...(policies ? [{ id: tokenId, name }] : [])],
+        result_info: { total_count: Number(legacyPresent) + Number(Boolean(policies)) } });
+    }
+    if (path === `/client/v4/accounts/${accountId}/tokens` && method === 'POST') {
+      assert.equal(authorization, `Bearer ${manager}`);
+      creates++;
+      const body = JSON.parse(String(init.body));
+      assert.equal(body.name, name);
+      assert.deepEqual(body.policies, [
+        { effect: 'allow', permission_groups: [{ id: routesId }],
+          resources: { [`com.cloudflare.api.account.zone.${zoneId}`]: '*' } },
+        { effect: 'allow', permission_groups: [{ id: editorId }],
+          resources: { [`com.cloudflare.api.account.${accountId}`]:
+            { [`com.cloudflare.edge.worker.script.${workerId}`]: '*' } } },
+      ]);
+      policies = body.policies;
+      if (extraPolicy) policies = [...policies!, { effect: 'allow',
+        permission_groups: [{ id: 'e'.repeat(32) }],
+        resources: { [`com.cloudflare.api.account.${accountId}`]: '*' } }];
+      return Response.json({ success: true, result: { id: tokenId, value } });
+    }
+    if (path === `/client/v4/accounts/${accountId}/tokens/${tokenId}`) {
+      assert.equal(authorization, `Bearer ${manager}`);
+      return Response.json({ success: true, result: { id: tokenId, name,
+        ...restrictions,
+        status: 'active', policies: policies!.map(policy => ({ ...policy,
+          permission_groups: policy.permission_groups.map((group: { id: string }) =>
+            ({ ...group, name: group.id === routesId ? 'Workers Routes Write' :
+              group.id === editorId ? 'Individual Workers Editor' : 'Workers Admin' })) })) } });
+    }
+    if (path === `/client/v4/accounts/${accountId}/tokens/verify`) {
+      assert.equal(authorization, `Bearer ${value}`);
+      return Response.json({ success: true, result: { id: tokenId, status: 'active' } });
+    }
+    const studioPath = `/client/v4/accounts/${accountId}/workers/scripts/gnr8-${scope.siteId}-studio`;
+    if (path === `${studioPath}/deployments?per_page=1`) {
+      return Response.json({ success: true, result: { deployments: [{ versions: [{
+        version_id: patches ? newVersion : oldVersion, percentage: 100 }] }] } });
+    }
+    if (path === `${studioPath}/secrets-bulk` && method === 'PATCH') {
+      const secrets = JSON.parse(String(init.body)).secrets;
+      assert.deepEqual(Object.keys(secrets).sort(), secretNames);
+      installedToken = secrets.PUBLISH_CLOUDFLARE_API_TOKEN.text;
+      patches++;
+      return Response.json({ success: true, result: {} });
+    }
+    if (path === `${studioPath}/versions/${newVersion}`) {
+      return Response.json({ success: true, result: { id: newVersion,
+        resources: { bindings: secretNames.map(name => ({ name, type: 'secret_text' })) } } });
+    }
+    if (path === `${studioPath}/versions/${oldVersion}`) {
+      return Response.json({ success: true, result: { id: oldVersion,
+        resources: { bindings: [] } } });
+    }
+    throw Error('unexpected mocked Cloudflare request');
+  }) as typeof fetch;
+  return { store, saved, requests, creates: () => creates,
+    patches: () => patches, installedToken: () => installedToken, transport,
+    provider: new CloudflarePublishTokenProvider(accountId, manager, workerReader, transport) };
+}
+
+test('issues one exact Worker and zone token through the real coordinator boundary', async () => {
+  const f = fixture();
+  const issued = await ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), f.provider, () => 1000);
+  assert.equal(issued.value, value);
+  assert.equal(f.creates(), 1);
+  assert(!JSON.stringify([...f.saved.values()]).includes(value));
+  assert.deepEqual(await ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), f.provider, () => 2000), issued);
+  assert.equal(f.creates(), 1);
+  assert(f.requests.every(request => request.authorization !== `Bearer ${value}` ||
+    request.path.endsWith('/tokens/verify')));
+});
+
+test('expanded Cloudflare policy blocks storage after creation', async () => {
+  const f = fixture(true);
+  await assert.rejects(ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), f.provider, () => 1000),
+  /native_studio_publish_token_scope_mismatch/);
+  assert.equal(f.creates(), 1);
+  assert(!f.saved.has('native-studio/publish-token-v1.json'));
+});
+
+for (const [label, restrictions] of Object.entries({
+  ip: { condition: { request_ip: { in: ['192.0.2.0/24'] } } },
+  expiry: { expires_on: '2030-01-01T00:00:00Z' },
+  activation: { not_before: '2026-01-01T00:00:00Z' },
+})) test(`${label} restriction blocks sealing even with exact permissions`, async () => {
+  const f = fixture(false, false, restrictions);
+  await assert.rejects(ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), f.provider, () => 1000),
+  /native_studio_publish_token_scope_mismatch/);
+  assert.equal(f.creates(), 1);
+  assert(!f.saved.has('native-studio/publish-token-v1.json'));
+});
+
+test('later provider restriction blocks reuse of a sealed token', async () => {
+  const restrictions: Record<string, unknown> = {};
+  const f = fixture(false, false, restrictions);
+  await ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), f.provider, () => 1000);
+  restrictions.condition = { request_ip: { in: ['192.0.2.0/24'] } };
+  await assert.rejects(ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), f.provider, () => 2000),
+  /native_studio_publish_token_scope_mismatch/);
+  assert.equal(f.creates(), 1);
+});
+
+test('existing manual token remains untouched while a separate managed token is sealed', async () => {
+  const f = fixture(false, true);
+  const issued = await ensureNativeStudioPublishToken(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), f.provider, () => 1000);
+  assert.equal(issued.tokenId, tokenId);
+  assert.equal(f.creates(), 1);
+  assert(f.requests.every(request => request.method !== 'PUT' &&
+    request.method !== 'DELETE' && !request.path.endsWith(`/${legacyTokenId}`)));
+  assert(!JSON.stringify([...f.saved.values()]).includes(value));
+});
+
+test('a separate manual account token survives managed issuance on a Studio with no old secret', async () => {
+  const f = fixture(false, true);
+  const client = { from(table: string) {
+    const query = { eq() { return query; }, async maybeSingle() {
+      return { error: null, data: table === 'sites'
+        ? { domain: 'site.app.pasadenagenerator.com' }
+        : { github_owner: 'pasadenagenerator', repository: 'gnr8-site',
+            repository_id: 123, binding_state: 'bound' } };
+    } };
+    return { select: () => query };
+  } } as unknown as SupabaseClient;
+  const shared = { GITHUB_PRIVATE_KEY:
+      '-----BEGIN RSA PRIVATE KEY-----\nexample\n-----END RSA PRIVATE KEY-----\n',
+    GITHUB_CLIENT_SECRET: 'github-client-secret-long-enough',
+    AI_API_KEY: 'openai-api-key-long-enough' };
+  const installed = await installNativeStudioRuntimeSecrets(scope, accountId, zoneId,
+    f.store, 'f'.repeat(64), shared, f.provider, 'cfat_' + 'S'.repeat(45),
+    client, f.transport);
+  assert.equal(installed.versionId, newVersion);
+  assert.equal(installed.previousVersionId, oldVersion);
+  assert.equal(f.installedToken(), value);
+  assert.equal(f.creates(), 1);
+  assert.equal(f.patches(), 1);
+  assert(f.requests.every(request => request.method !== 'PUT' &&
+    request.method !== 'DELETE' && !request.path.endsWith(`/${legacyTokenId}`)));
+  assert(!JSON.stringify([...f.saved.values()]).includes(value));
+});

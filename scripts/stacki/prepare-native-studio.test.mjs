@@ -4,12 +4,15 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { configuration, prepareNativeStudio } from './prepare-native-studio.mjs';
+import { STACKI_RELEASE_PIN, configuration, prepareNativeStudio } from './prepare-native-studio.mjs';
 import { exportStandaloneProject } from '../../apps/platform/gnr8/standalone/standalone-export.ts';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const site = { siteId: id, repository: 'example/site-one', repositoryId: '123', branch: 'astro/confirmed',
   studioOrigin: 'https://one.example.com', accountId: 'a'.repeat(32), appId: '456', installationId: '789', clientId: 'Iv1.example' };
+const access = { version: 2, provider: 'access', aud: 'b'.repeat(64),
+  teamDomain: 'gnr8.cloudflareaccess.com',
+  admins: ['access:owner@example.com', 'access:admin@example.com'] };
 const releaseFile = process.env.STACKI_RELEASE_FILE;
 async function project(t) {
   const root = await mkdtemp(join(tmpdir(), 'gnr8-native-studio-test-'));
@@ -35,25 +38,107 @@ test('two sites share the pin and native gateway but have separate runtime, draf
   assert.notEqual(a.vars.GITHUB_REPOSITORY, b.vars.GITHUB_REPOSITORY);
   assert.equal(a.vars.EDITOR_ACCESS, 'repository'); assert.equal(a.containers[0].max_instances, 1);
   assert.equal(a.vars.PREVIEW_ORIGIN, 'https://preview.one.example.com');
+  assert.equal(a.vars.AI_BASE_URL, 'https://api.openai.com/v1');
+  assert.equal(a.vars.AI_MODEL, 'gpt-5.4-mini-2026-03-17');
+  assert.equal(a.vars.AI_API_KEY, undefined);
   assert.equal(a.main, b.main);
+  assert.equal(a.vars.GITHUB_DEPLOY_WORKER, undefined);
+  assert.equal(a.vars.GITHUB_DEPLOY_ACCOUNT, undefined);
+  const publish = JSON.parse(first.files.get('.stacki/publish.json'));
+  const gateway = JSON.parse(first.files.get('wrangler.json'));
+  assert.equal(publish.hosting.provider, 'cloudflare-workers');
+  assert.equal(publish.hosting.project, gateway.name);
+  assert.equal(publish.hosting.accountId, gateway.account_id);
+  assert.equal(gateway.main, './studio/src/cloudflare/site.ts');
+  assert.equal(gateway.assets.directory, './dist');
   assert.throws(() => configuration({ ...site, token: 'do-not-store' }), /non-secret/);
   assert.throws(() => configuration({ ...site, studioOrigin: 'http://one.example.com' }), /HTTPS/);
 });
 
-test('actual standalone export -> pinned native source -> gateway, resumable without recapture or state loss', { skip: !releaseFile && 'Set STACKI_RELEASE_FILE to the retained 1.4.2 release' }, async t => {
+test('Access v2 adds exact native auth and roles without changing legacy files', () => {
+  const legacy = configuration(site);
+  const configured = configuration(site, access);
+  assert.deepEqual(configuration(site, undefined), legacy);
+  assert.deepEqual(configured.site, legacy.site);
+  assert.deepEqual([...configured.files.keys()], [
+    'studio/cloudflare/wrangler.jsonc', 'studio/cloudflare/gnr8-worker-entry.ts',
+    ...[...legacy.files.keys()].filter(path => path !== 'studio/cloudflare/wrangler.jsonc'),
+    '.stacki/roles.json']);
+  for (const [path, content] of legacy.files) {
+    if (path !== 'studio/cloudflare/wrangler.jsonc')
+      assert.equal(configured.files.get(path), content);
+  }
+  assert.equal(legacy.files.has('.stacki/roles.json'), false);
+  const vars = JSON.parse(configured.files.get('studio/cloudflare/wrangler.jsonc')).vars;
+  assert.equal(JSON.parse(configured.files.get('studio/cloudflare/wrangler.jsonc')).main,
+    './gnr8-worker-entry.ts');
+  const routes = JSON.parse(configured.files.get('studio/cloudflare/wrangler.jsonc')).routes;
+  assert.deepEqual(routes, [
+    { pattern: 'preview.one.example.com', custom_domain: true },
+    { pattern: 'one.example.com/studio', zone_name: 'example.com' },
+    { pattern: 'one.example.com/studio/*', zone_name: 'example.com' },
+  ]);
+  const previousZone = process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID;
+  try {
+    process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID = '7'.repeat(32);
+    const hostedRoutes = JSON.parse(configuration(site, access).files.get('studio/cloudflare/wrangler.jsonc')).routes;
+    assert.equal(hostedRoutes[1].zone_id, '7'.repeat(32));
+    assert.equal(hostedRoutes[2].zone_id, '7'.repeat(32));
+  } finally {
+    if (previousZone === undefined) delete process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID;
+    else process.env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID = previousZone;
+  }
+  assert.deepEqual({ provider: vars.AUTH_PROVIDER, access: vars.EDITOR_ACCESS,
+    teamDomain: vars.ACCESS_TEAM_DOMAIN, aud: vars.ACCESS_AUD,
+    bootstrapAdmin: vars.AUTH_BOOTSTRAP_ADMIN }, {
+    provider: 'access', access: 'roles', teamDomain: access.teamDomain,
+    aud: access.aud, bootstrapAdmin: 'access:admin@example.com',
+  });
+  assert.deepEqual(JSON.parse(configured.files.get('.stacki/roles.json')), {
+    version: 1, defaultRole: 'client', roles: [
+      { id: 'admin', members: ['access:admin@example.com', 'access:owner@example.com'] },
+      { id: 'client', members: [] },
+    ],
+  });
+  assert.deepEqual(configured.access.admins,
+    ['access:admin@example.com', 'access:owner@example.com']);
+  for (const invalid of [
+    { ...access, aud: '' }, { ...access, teamDomain: 'other.example.com' },
+    { ...access, admins: [] }, { ...access, admins: ['access:Owner@example.com'] },
+    { ...access, extra: true }, null,
+  ]) assert.throws(() => configuration(site, invalid), /Invalid verified Access binding/);
+});
+
+test('prepared Access source has a distinct immutable v2 receipt',
+  { skip: !releaseFile && 'Set STACKI_RELEASE_FILE to the pinned native release' }, async t => {
+    const { root } = await project(t);
+    await prepareNativeStudio({ project: root, releaseFile, site, access });
+    const receipt = JSON.parse(await readFile(join(root, '.gnr8/native-studio.json'), 'utf8'));
+    assert.equal(receipt.format, 'gnr8-native-studio:v2');
+    assert.deepEqual(receipt.access.admins,
+      ['access:admin@example.com', 'access:owner@example.com']);
+    assert.equal(JSON.parse(await readFile(join(root, '.stacki/roles.json'), 'utf8'))
+      .defaultRole, 'client');
+    await assert.rejects(prepareNativeStudio({ project: root, releaseFile, site }), /differs/);
+  });
+
+test('actual standalone export -> pinned native source -> gateway, resumable without recapture or state loss', { skip: !releaseFile && 'Set STACKI_RELEASE_FILE to the pinned native release' }, async t => {
   const { root, exported } = await project(t);
   const result = await prepareNativeStudio({ project: root, releaseFile, site });
-  assert.equal(result.hosted, false); assert.equal(result.version, '1.4.2');
+  assert.equal(result.hosted, false); assert.equal(result.version, STACKI_RELEASE_PIN.version);
   const native = JSON.parse(await readFile(releaseFile, 'utf8'));
   for (const file of native.files) assert.equal(await readFile(join(root, 'studio', file.path), 'utf8'), file.content);
   for (const file of exported.files) assert.deepEqual(await readFile(join(root, file.path)), file.body);
   await mkdir(join(root, 'studio/.studio-state'));
   await writeFile(join(root, 'studio/.studio-state/draft'), 'keep my draft');
   // Resume after losing a later config write; the source/capture is untouched.
-  await rm(join(root, 'cloudflare/site.wrangler.json'));
+  await rm(join(root, 'wrangler.json'));
   assert.deepEqual(await prepareNativeStudio({ project: root, releaseFile, site }), result);
   assert.equal(await readFile(join(root, 'studio/.studio-state/draft'), 'utf8'), 'keep my draft');
   const { serveSite } = await import(pathToFileURL(join(root, 'studio/src/features/deployment/siteGateway.ts')).href);
+  const { parsePublishConfig } = await import(pathToFileURL(join(root, 'studio/vendor/stacki/shared/properties/publishConfig.ts')).href);
+  const publishConfig = JSON.parse(await readFile(join(root, '.stacki/publish.json'), 'utf8'));
+  assert.equal(parsePublishConfig(publishConfig).hosting.provider, 'cloudflare-workers');
   const forwarded = [];
   const env = { ASSETS: { fetch: async request => { forwarded.push(['asset', request]); return new Response('website'); } },
     STUDIO: { fetch: async request => { forwarded.push(['studio', request]); return new Response('editor'); } }, SITE_VERSION: { tag: 'c'.repeat(40) } };

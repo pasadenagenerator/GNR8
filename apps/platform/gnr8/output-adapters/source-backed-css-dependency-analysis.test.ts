@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  collectHtmlSelectorEvidence,
   findProvablyUnusedCssDependencies,
   removeProvablyUnusedCssDependencyRules,
 } from "./source-backed-css-dependency-analysis";
@@ -41,4 +42,18 @@ test("does not classify a dependency as unused when any selector branch can matc
     stylesheetUrl: STYLESHEET_URL,
     htmlDocuments: ['<main class="hero"></main>'],
   }), []);
+});
+
+test("shared selector evidence preserves CSS dependency decisions across stylesheets", () => {
+  const htmlDocuments = ['<main class="hero"></main>', '<footer id="contact"></footer>'];
+  const selectorEvidence = collectHtmlSelectorEvidence(htmlDocuments);
+  for (const css of [
+    ".missing{background:url('./missing.webp')}.hero{background:url('./hero.webp')}",
+    "#contact{background:url('./contact.webp')}#absent{background:url('./absent.webp')}",
+  ]) {
+    assert.deepEqual(
+      findProvablyUnusedCssDependencies({ css, stylesheetUrl: STYLESHEET_URL, htmlDocuments, selectorEvidence }),
+      findProvablyUnusedCssDependencies({ css, stylesheetUrl: STYLESHEET_URL, htmlDocuments }),
+    );
+  }
 });

@@ -1,5 +1,5 @@
 import { BrandGuidePanel } from './BrandGuidePanel'
-import { resolvedGitHubTarget } from '@/gnr8/stacki/stacki-github-config'
+import { readNativeStudioLaunchForScope } from '@/gnr8/standalone/native-studio-first-open'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import type { CSSProperties, ReactNode } from 'react'
@@ -8,7 +8,7 @@ import CapturedContentReviewPanel from './CapturedContentReviewPanel'
 import SiteContextLayout from './SiteContextLayout'
 import SiteActionsPanel from './SiteActionsPanel'
 import { VariantNavigation } from './VariantNavigation'
-import StackiEditorPanel from './StackiEditorPanel'
+import NativeStackiPanel from './NativeStackiPanel'
 import ContentBindingsPanel from './ContentBindingsPanel'
 import SiteDeletePanel from './SiteDeletePanel'
 import SiteDomainSettingsPanel from './SiteDomainSettingsPanel'
@@ -1508,6 +1508,9 @@ export default async function SiteWorkspacePage(props: Props) {
   const canRunTransformation = canPerformAction(currentUserAgency.role, 'run_migration')
   const canPublish = canPerformAction(currentUserAgency.role, 'publish')
   const canDeleteSite = canPerformAction(currentUserAgency.role, 'delete_site')
+  const nativeStudioLaunch = props.activeTab === 'design' && canPublish
+    ? await readNativeStudioLaunchForScope({ agencyId: currentUserAgency.agency_id, clientId, siteId })
+    : null
 
   return (
     <SiteContextLayout
@@ -1548,25 +1551,13 @@ export default async function SiteWorkspacePage(props: Props) {
             })
           : null}
         {props.activeTab === 'structure' ? renderStructureContent(readModel) : null}
-        {props.activeTab === 'design' && canPublish &&
-          process.env.GNR8_STACKI_SESSIONS_ENABLED === '1' &&
-          process.env.GNR8_STACKI_DRAFTS_ENABLED === '1' &&
-          process.env.GNR8_STACKI_RUNTIME_SNAPSHOT &&
-          process.env.GNR8_STACKI_PILOT_USER_ID === currentUserAgency.user_id &&
-          readModel.pipeline.runtimeSelection.selectedVersionId ? (
-          <StackiEditorPanel
-            aiAvailable={process.env.GNR8_AI_EXECUTION_ENABLED === 'true'}
-            storage={await resolvedGitHubTarget({agencyId:currentUserAgency.agency_id,clientId,siteId,
-              siteVersionId:readModel.pipeline.runtimeSelection.selectedVersionId}) ? 'GitHub' : 'GNR8'}
-            candidatePreparationEnabled={process.env.GNR8_STACKI_CANDIDATES_ENABLED === '1'}
-            key={readModel.pipeline.runtimeSelection.selectedVersionId}
-            agencyId={currentUserAgency.agency_id}
-            clientId={clientId}
-            siteId={siteId}
-            siteVersionId={readModel.pipeline.runtimeSelection.selectedVersionId}
-          />
+        {props.activeTab === 'design' ? (
+          <NativeStackiPanel canEdit={canPublish} url={nativeStudioLaunch?.url ?? null}
+            firstOpen={nativeStudioLaunch?.kind === 'first-open'}
+            reservationEnabled={process.env.GNR8_NATIVE_STUDIO_RESOURCE_RESERVATION_ENABLED === '1'}
+            agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} />
         ) : null}
-        {props.activeTab === 'design' ? <BrandGuidePanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} siteVersionId={readModel.pipeline.importVersion.savedBrandGuideSiteVersionId ?? readModel.preview.lumosBrand?.siteVersionId ?? readModel.pipeline.importVersion.selectedWorkspaceSiteVersionId ?? readModel.pipeline.importVersion.latestImportSiteVersionId} canEdit={canPerformAction(currentUserAgency.role, 'edit_client_settings')}
+        {props.activeTab === 'design' ? <BrandGuidePanel agencyId={currentUserAgency.agency_id} clientId={clientId} siteId={siteId} siteVersionId={readModel.preview.selectedCaptureSiteVersionId ?? readModel.pipeline.importVersion.savedBrandGuideSiteVersionId ?? readModel.preview.lumosBrand?.siteVersionId ?? readModel.pipeline.importVersion.latestImportSiteVersionId ?? readModel.pipeline.importVersion.selectedWorkspaceSiteVersionId} canEdit={canPerformAction(currentUserAgency.role, 'edit_client_settings')}
           canPrepare={canPublish}
           proposal={readModel.preview.lumosBrand && readModel.preview.previewUrl
             ? {revision:readModel.preview.lumosBrand.revision,previewUrl:readModel.preview.previewUrl} : null}

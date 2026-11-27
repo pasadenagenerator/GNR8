@@ -5,6 +5,7 @@ import { CAPTURE_SCOPE_NOTE, isNonPageOmissionReason, reviewCapturedRoute, type 
 
 const MAX_REVIEW_ROUTES = 64;
 const MAX_REVIEW_HTML_BYTES = 16 * 1024 * 1024;
+const REVIEW_CONCURRENCY = 4;
 
 /** Caller supplies the existing authorized, integrity-checked retained-file reader. Never executes source HTML. */
 export async function loadCapturedContentReview(input: {
@@ -17,22 +18,27 @@ export async function loadCapturedContentReview(input: {
   const result: CapturedContentReview = {siteVersionId:input.siteVersionId,artifactId:input.artifactId,routes:[],omittedLinks:[],limitations:[]};
   if(routes.length>MAX_REVIEW_ROUTES) result.limitations.push(`Review limited to the first ${MAX_REVIEW_ROUTES} retained routes; further routes have not been inspected.`);
   const baseline = input.baseline;
+  const filePaths = new Set(Object.keys(input.fileMap));
   let reviewedHtmlBytes = 0;
-  for (const route of routes.slice(0,MAX_REVIEW_ROUTES)) {
+  const selectedRoutes = routes.slice(0,MAX_REVIEW_ROUTES);
+  const reviewRoute = async (route: string): Promise<CapturedContentReview['routes'][number]> => {
     const resolved = resolveRawTemplateRouteMapFile({siteVersionId:input.siteVersionId,requestedPath:route,entryHtmlPath:input.entryHtmlPath,fileMap:input.fileMap,importProvenanceSummary:input.provenance,routeMapServingEnabled:true});
     const filePath = resolved.outcome==='selected'?resolved.rawFilePath:route==='/'&&resolved.outcome==='disabled'?input.entryHtmlPath:null;
     const sourceUrl = ('sourceUrl' in resolved?resolved.sourceUrl:null) ?? (route==='/' ? input.provenance?.multiPageDiscovery?.rawArtifactAssembly?.seedUrl ?? baseline?.sourceUrl ?? null : null);
-    const fail = (reason: string) => result.routes.push({state:'failed',coverage:[],route,sourceUrl,filePath,items:[],limitations:[reason]});
-    if(!filePath){fail('Retained route mapping unavailable.');continue;}
+    const fail = (reason: string): CapturedContentReview['routes'][number] => ({state:'failed',coverage:[],route,sourceUrl,filePath,items:[],limitations:[reason]});
+    if(!filePath)return fail('Retained route mapping unavailable.');
     const meta=input.fileMap[filePath];
-    if(!meta || meta.sizeBytes>2*1024*1024 || !/text\/html|application\/xhtml\+xml/i.test(meta.mediaType)){fail('HTML missing, invalid or above the 2 MiB review limit.');continue;}
-    if(reviewedHtmlBytes + meta.sizeBytes > MAX_REVIEW_HTML_BYTES){fail('Retained HTML exceeds the 16 MiB total review limit; content remains unverified.');continue;}
+    if(!meta || meta.sizeBytes>2*1024*1024 || !/text\/html|application\/xhtml\+xml/i.test(meta.mediaType))return fail('HTML missing, invalid or above the 2 MiB review limit.');
+    if(reviewedHtmlBytes + meta.sizeBytes > MAX_REVIEW_HTML_BYTES)return fail('Retained HTML exceeds the 16 MiB total review limit; content remains unverified.');
     reviewedHtmlBytes += meta.sizeBytes;
     try {
       const response=await input.read(filePath);
-      if(!response.ok){fail('Retained HTML could not be read and verified.');continue;}
-      result.routes.push(reviewCapturedRoute({route,sourceUrl,filePath,html:await response.text(),siteId:input.siteId,filePaths:new Set(Object.keys(input.fileMap)),baseline}));
-    } catch {fail('Retained HTML read failed; content is unverified.');}
+      if(!response.ok)return fail('Retained HTML could not be read and verified.');
+      return reviewCapturedRoute({route,sourceUrl,filePath,html:await response.text(),siteId:input.siteId,filePaths,baseline});
+    } catch {return fail('Retained HTML read failed; content is unverified.');}
+  };
+  for(let cursor=0;cursor<selectedRoutes.length;cursor+=REVIEW_CONCURRENCY){
+    result.routes.push(...await Promise.all(selectedRoutes.slice(cursor,cursor+REVIEW_CONCURRENCY).map(reviewRoute)));
   }
   // Retain known omissions from every existing acquisition stage; do not infer successful coverage.
   const discovery=input.provenance?.multiPageDiscovery;

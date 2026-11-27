@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveAssetMediaType, rewriteRawTemplateCssForRuntime } from "@/src/public-site/raw-template-runtime";
 import { RawImportGitCache } from '@/gnr8/site/raw-import-git-cache';
+import { MAX_RETAINED_ASSET_BYTES } from '@/gnr8/site/retained-asset-limits';
 import type { RawImportedSiteArtifactMetadata } from '@/gnr8/runtime/types';
 
 const headers = {
@@ -26,6 +27,7 @@ type FailureObserver=(failure:RetainedAssetReadFailure)=>void;
 /** Request-local immutable metadata cache. Never share across actors or requests. */
 export function createVerifiedRetainedAssetReader(client: SupabaseClient, batchFiles = false, batchPaths?: string[],onFailure?:FailureObserver,
   cache?:Pick<RawImportGitCache,'read'>) {
+  const requestCache = cache ?? new RawImportGitCache();
   const artifacts = new Map<string, ReturnType<typeof readArtifact>>();
   const manifests = new Map<string, ReturnType<typeof readManifest>>();
   const fileBatches = new Map<string, Promise<{ data: any[] | null; error: unknown; status?:number }>>();
@@ -67,7 +69,7 @@ export function createVerifiedRetainedAssetReader(client: SupabaseClient, batchF
       let group: string[] = [], bytes = 0;
       for (const path of paths) {
         const size = fileMap[path]?.sizeBytes;
-        if (!Number.isSafeInteger(size) || size < 0 || size > 12 * 1024 * 1024) throw new Error('Invalid retained file size');
+        if (!Number.isSafeInteger(size) || size < 0 || size > MAX_RETAINED_ASSET_BYTES) throw new Error('Invalid retained file size');
         if (group.length && (group.length >= 8 || bytes + size > 4 * 1024 * 1024)) {
           if (group.includes(input.path)) break;
           group = []; bytes = 0;
@@ -88,7 +90,7 @@ export function createVerifiedRetainedAssetReader(client: SupabaseClient, batchF
       if (!manifests.has(id)) manifests.set(id, readManifest(id));
       return manifests.get(id)!;
     },
-  },onFailure,cache);
+  },onFailure,requestCache);
 }
 
 /** Caller must establish either authenticated ownership or an active public artifact binding. */

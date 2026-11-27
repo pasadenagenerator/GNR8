@@ -1,7 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import postcss from 'postcss';
-import {preserveMonoContactEmailStyles} from './standalone-export';
+import {materializeDeferredStylesheetLinks,preserveMonoContactEmailStyles,rejectUnsupportedFunctions} from './standalone-export';
+
+test('exact retained CSS load shim becomes an ordinary stylesheet while other events remain blocked',()=>{
+ const css=`/_assets/${'a'.repeat(64)}/${'b'.repeat(64)}.css?gnr8css=2`;
+ const link=`<link rel="stylesheet" href="${css}" media="print" onload="this.onload=null;this.media='all'" onerror="this.onerror=null;this.media='all'">`;
+ const normalized=materializeDeferredStylesheetLinks(link);
+ assert.equal(normalized,`<link rel="stylesheet" href="${css}" media="all">`);
+ assert.doesNotThrow(()=>rejectUnsupportedFunctions(normalized));
+ for(const other of [link.replace('onload=', 'onclick='),
+   link.replace(css,'https://foreign.example/style.css'),
+   link.replace('onerror=', 'onmouseover=')]){
+  assert.equal(materializeDeferredStylesheetLinks(other),other);
+  assert.throws(()=>rejectUnsupportedFunctions(other),/standalone_unsupported_dynamic_feature/);
+ }
+});
 
 test('projected Mono email retains captured text-field styling and focus cascade without affecting login or other forms',()=>{
  const css='.form input[type="text"],.form input[type="password"],.login input[type="text"]{height:37px;padding:10px;border:1px solid #ccc;background-color:#f8f8f8}.form input[type=text]:focus{border-color:blue}@media(max-width:600px){.form input[type=\'text\']{font-size:14px}}';
@@ -36,6 +50,12 @@ test('verified retained image URL is rewritten before dynamic feature validation
  const baseline=[{path:'package.json',base64:Buffer.from('{"dependencies":{"astro":"5.18.2"}}').toString('base64')},
   {path:'src/pages/index.astro',base64:Buffer.from(`<img src="${assetPath}" alt="Logo">`).toString('base64')}];
  const result=await exportStandaloneProject({baseline,selection:{kind:'generated-source',scope,sha256:'a'.repeat(64)},sourceArtifact:{id,sha256:'b'.repeat(64)},assets:[{path:assetPath,sourceSha256:sha,mediaType:'image/png',body}]});
+ const pkg=JSON.parse(result.files.find(f=>f.path==='package.json')!.body.toString());
+ const lock=JSON.parse(result.files.find(f=>f.path==='package-lock.json')!.body.toString());
+ assert.equal(pkg.dependencies.astro,'7.4.7');
+ assert.equal(pkg.engines.node,'26.x');
+ assert.deepEqual(lock.packages[''].dependencies,pkg.dependencies);
+ assert.equal(lock.packages['node_modules/astro'].version,'7.4.7');
  const page=result.files.find(f=>f.path==='src/pages/index.astro')!.body.toString();
  assert.match(page,/src="\/_assets\/[a-f0-9]{64}\/[a-f0-9]{64}\.png"/);
  assert.ok(!page.includes('/api/gnr8/'));
@@ -52,10 +72,10 @@ test('Astro 7 source exports the exact Node 26 package and coherent lockfile',as
  const result=await exportStandaloneProject({baseline,selection:{kind:'generated-source',scope,sha256:'a'.repeat(64)},sourceArtifact:{id,sha256:'b'.repeat(64)},assets:[]});
  const read=(path:string)=>JSON.parse(result.files.find(f=>f.path===path)!.body.toString());
  const pkg=read('package.json'),lock=read('package-lock.json');
- assert.equal(pkg.dependencies.astro,'7.4.4');
+ assert.equal(pkg.dependencies.astro,'7.4.7');
  assert.equal(pkg.engines.node,'26.x');
  assert.deepEqual(lock.packages[''].dependencies,pkg.dependencies);
- assert.equal(lock.packages['node_modules/astro'].version,'7.4.4');
+ assert.equal(lock.packages['node_modules/astro'].version,'7.4.7');
  assert.match(result.files.find(f=>f.path==='README.md')!.body.toString(),/Node 26/);
  assert.match(result.files.find(f=>f.path==='astro.config.mjs')!.body.toString(),/cssMinify:false/);
  const page=result.files.find(f=>f.path==='src/pages/index.astro')!.body.toString();

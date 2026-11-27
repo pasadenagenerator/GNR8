@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import postcss, {type Root} from 'postcss';
-import { parse, type DefaultTreeAdapterMap } from 'parse5';
+import { parse, parseFragment, type DefaultTreeAdapterMap } from 'parse5';
 import { type StackiCandidateSelection } from '../stacki/stacki-candidate-selection';
 import { selectStackiCandidateSource } from '../stacki/stacki-candidate-source';
 import { isOwnedRetainedRuntimeScript } from '../../src/public-site/owned-retained-runtime';
@@ -47,9 +47,14 @@ export async function exportStandaloneProject(input:StandaloneExportInput|Stored
  if(!sourcePackage)throw Error('standalone_toolchain_unverified');
  let sourceToolchain:{dependencies?:{astro?:string};engines?:{node?:string}};
  try{sourceToolchain=JSON.parse(sourcePackage.body.toString('utf8'));}catch{throw Error('standalone_toolchain_unverified');}
- const astro7=sourceToolchain.dependencies?.astro==='7.4.4'&&sourceToolchain.engines?.node==='26.13.0';
- if(!astro7&&sourceToolchain.dependencies?.astro!=='5.18.2')throw Error('standalone_toolchain_transform_unsupported');
- const nodeMajor=astro7?'26':'22';
+ const sourceAstro=sourceToolchain.dependencies?.astro;
+ if(sourceAstro!=='5.18.2'&&
+   !(['7.4.4','7.4.7'].includes(sourceAstro??'')&&
+     ['26.x','26.13.0'].includes(sourceToolchain.engines?.node??'')))
+  throw Error('standalone_toolchain_transform_unsupported');
+ // Existing Astro 5/7 captures share one reviewed Astro 7.4.7 output toolchain.
+ const astro7=true;
+ const nodeMajor='26';
  const templateRoot=[join(process.cwd(),'gnr8/standalone/templates'),join(process.cwd(),'apps/platform/gnr8/standalone/templates'),join(process.cwd(),'../platform/gnr8/standalone/templates')].find(p=>existsSync(join(p,'contact-runtime.mjs')));
  if(!templateRoot)throw Error('standalone_templates_not_packaged');
  const templates=await Promise.all(['package.json','package-lock.json','optimize.mjs'].map(async name=>({name,body:await readFile(join(templateRoot,astro7&&name!=='optimize.mjs'?name.replace('.json','.astro7.json'):name))})));
@@ -96,7 +101,7 @@ export async function exportStandaloneProject(input:StandaloneExportInput|Stored
    // Retained assets still use the protected GNR8 preview URL in editable
    // source. Classify functions only after the verified asset map has replaced
    // those URLs; an image is not a dynamic API dependency.
-   const mappedHtml=rewrite(original);
+   const mappedHtml=materializeDeferredStylesheetLinks(rewrite(original));
    const exportedHtml=mappedHtml.replace(/(\bwidth\s*:\s*)66,666%/g,(_match,prefix:string)=>{
     correctedCss.push({path:file.path,property:'width',before:'66,666%',after:'66.666%'});
     return prefix+'66.666%';
@@ -142,6 +147,25 @@ export async function exportStandaloneProject(input:StandaloneExportInput|Stored
  return {files,manifest,manifestSha256,contactRequired};
 }
 function extension(path:string){const value=path.match(/\.[a-zA-Z0-9]{1,8}$/)?.[0];return value??'.bin';}
+/** Replace only the retained, exact CSS load shim with an ordinary stylesheet.
+ * It changes no other event attribute or script and keeps the owned CSS URL. */
+export function materializeDeferredStylesheetLinks(html:string){
+ return html.replace(/<link\b[^>]*>/gi,tag=>{
+  const node=parseFragment(tag).childNodes.find(child=>
+   'tagName' in child&&child.tagName==='link');
+  if(!node||!('attrs' in node))return tag;
+  const attrs=new Map(node.attrs.map(attr=>[attr.name,attr.value]));
+  const href=attrs.get('href')??'';
+  if(attrs.get('rel')!=='stylesheet'||!['print','all'].includes(attrs.get('media')??'')||
+   !/^\/_assets\/[a-f0-9]{64}\/[a-f0-9]{64}\.css(?:\?gnr8css=2)?$/.test(href)||
+   attrs.get('onload')!=="this.onload=null;this.media='all'"||
+   attrs.get('onerror')!=="this.onerror=null;this.media='all'"||
+   node.attrs.some(attr=>/^on[a-z]/i.test(attr.name)&&!['onload','onerror'].includes(attr.name)))return tag;
+  return tag.replace(/\s+onload="this\.onload=null;this\.media='all'"/,'')
+   .replace(/\s+onerror="this\.onerror=null;this\.media='all'"/,'')
+   .replace(/\bmedia="print"/,'media="all"');
+ });
+}
 /** Mono captured email as type=text. The supported contact projection changes
  * it to type=email for native validation; retain its source styles at the same
  * specificity, only within the projected form. Keep declaration order intact. */

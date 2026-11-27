@@ -4,9 +4,10 @@ import type {SupabaseClient} from '@supabase/supabase-js';
 import {getSupabaseServiceRoleClient} from '@/src/supabase/service-role-server';
 import {ASTRO_CANDIDATE_OBJECT_BUCKET_ENV} from '../output-adapters/astro-production-candidate-object-store';
 import type {RawImportedSiteArtifactMetadata} from '../runtime/types';
-import {readStandaloneGit} from '../standalone/publication-git';
+import {readStandaloneGit,RAW_IMPORT_GIT_MAX_BYTES} from '../standalone/publication-git';
 import {resolvedGitHubTarget} from '../stacki/stacki-github-config';
 import {GitHubStackiStore} from '../stacki/stacki-github-store';
+import {ShardedRawImportReader} from './raw-import-sharded-git';
 
 type Ref=NonNullable<RawImportedSiteArtifactMetadata['gitArchive']>;
 type Recovery={resolveTarget:typeof resolvedGitHubTarget;
@@ -24,7 +25,8 @@ function key(ref:Ref,versionId:string,sha256:string){
   if(!ref||!uuid.test(versionId)||!uuid.test(ref.scope?.agencyId??'')||
     !uuid.test(ref.scope?.clientId??'')||!uuid.test(ref.scope?.siteId??'')||
     Object.keys(ref.scope??{}).length!==3||!commit.test(ref.commit)||!sha.test(ref.manifestSha256)||
-    !sha.test(sha256)||ref.manifestPath!==`raw-import/${versionId}/.gnr8-import-manifest.json`||
+    !sha.test(sha256)||(ref.archiveFormat!==undefined&&ref.archiveFormat!=='sharded-v1')||
+    ref.manifestPath!==`raw-import/${versionId}/.gnr8-import-manifest.json`||
     !/^[A-Za-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{0,62}$/.test(ref.repository))invalid();
   const {agencyId,clientId,siteId}=ref.scope;
   return `raw-import-cache/v1/${agencyId}/${clientId}/${siteId}/${versionId}/${ref.commit}/${sha256}`;
@@ -33,6 +35,7 @@ function key(ref:Ref,versionId:string,sha256:string){
 export class RawImportGitCache{
   private bucketPromise?:Promise<ReturnType<SupabaseClient['storage']['from']>|null>;
   private archives=new Map<string,Promise<{files:Map<string,Buffer>;manifest:{files:Array<{path:string;bytes:number;sha256:string}>}}>>();
+  private sharded=new Map<string,Promise<ShardedRawImportReader>>();
   constructor(private client:Pick<SupabaseClient,'storage'>|null=getSupabaseServiceRoleClient(),
     private bucketName=process.env[ASTRO_CANDIDATE_OBJECT_BUCKET_ENV]??'',
     private git:Recovery=recovery){}
@@ -63,7 +66,8 @@ export class RawImportGitCache{
       if(!target||`${target.owner}/${target.repository}`!==ref.repository)invalid();
       await this.git.verifyTarget(scope,target);
       const archive=await this.git.read({owner:target.owner,repository:target.repository,
-        branch:`imports/${versionId}`,commit:ref.commit,token:target.token});
+        branch:`imports/${versionId}`,commit:ref.commit,token:target.token},fetch,
+        {maxBytes:RAW_IMPORT_GIT_MAX_BYTES,timeoutMs:180_000});
       if(archive.commit!==ref.commit||archive.parentCount!==1||!archive.parent)invalid();
       const manifestBody=archive.files.get(ref.manifestPath);
       if(!manifestBody||hash(manifestBody)!==ref.manifestSha256)invalid();
@@ -81,6 +85,22 @@ export class RawImportGitCache{
   }
   private async recover(ref:Ref,versionId:string,file:{sha256:string;sizeBytes:number}):Promise<Buffer>{
     try{
+      if(ref.archiveFormat==='sharded-v1'){
+        const archiveKey=JSON.stringify([ref.scope,ref.repository,ref.commit,ref.manifestSha256,versionId]);
+        let pending=this.sharded.get(archiveKey);
+        if(!pending){
+          pending=(async()=>{
+            const scope={...ref.scope,siteVersionId:versionId};
+            const target=await this.git.resolveTarget(scope);
+            if(!target||`${target.owner}/${target.repository}`!==ref.repository)invalid();
+            await this.git.verifyTarget(scope,target);
+            return new ShardedRawImportReader(ref,versionId,target);
+          })();
+          this.sharded.set(archiveKey,pending);
+        }
+        return (await pending).read(file);
+      }
+      if(ref.archiveFormat!==undefined)invalid();
       const archive=await this.archive(ref,versionId);
       const manifest=archive.manifest;
       const matches=manifest.files.filter(entry=>entry.sha256===file.sha256&&entry.bytes===file.sizeBytes);

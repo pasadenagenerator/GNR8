@@ -26,3 +26,12 @@ test('invalid path, content hash and tenant scope fail before any Git call',()=>
  assert.throws(()=>rawImportGitPackage({...input,files:[{...input.files[0],sha256:'0'.repeat(64)}]}),/RAW_IMPORT_GIT_ARCHIVE_INVALID/);
  assert.throws(()=>rawImportGitPackage({...input,scope:{...scope,siteId:'another-site'}}),/RAW_IMPORT_GIT_ARCHIVE_INVALID/);
 });
+test('raw import package accepts a retained capture above the former 128 MiB ceiling',()=>{
+ const bytes=Buffer.alloc(26*1024*1024);
+ const sha256=createHash('sha256').update(bytes).digest('hex');
+ const files=Array.from({length:5},(_,index)=>({path:`assets/large-${index}.bin`,
+  mediaType:'application/octet-stream',bytes,sizeBytes:bytes.length,sha256}));
+ const pkg=rawImportGitPackage({...input,files});
+ assert.equal(pkg.manifest.files.length,5);
+ assert.equal(pkg.manifest.files.reduce((sum,file)=>sum+file.bytes,0),130*1024*1024);
+});

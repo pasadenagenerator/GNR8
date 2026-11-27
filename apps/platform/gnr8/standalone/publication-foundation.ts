@@ -47,15 +47,16 @@ export function requireConfirmedImport(input: {
  return {confirmationSha256:fingerprint(saved),brandSha256:saved.brandSha256,brandRevision:brand.revision};
 }
 
-/** The legacy standalone transform replaces the package/config. Never silently
- * downgrade an Astro 7 Stacki source to its Astro 5 build template. */
+/** Only the reviewed Astro 5/7 source versions may enter the shared Astro
+ * 7.4.7 output. The target is checked independently of source provenance. */
 export function requireCompatibleStandaloneToolchain(source:ExportFile[],exported:ExportFile[]) {
  const read=(files:ExportFile[])=>{
   try{return JSON.parse(files.find(f=>f.path==='package.json')!.body.toString());}
   catch{throw Error('standalone_toolchain_unverified');}
  };
  const before=read(source),after=read(exported);
- if(!before.dependencies?.astro||before.dependencies.astro!==after.dependencies?.astro)
+ if(!['5.18.2','7.4.4','7.4.7'].includes(before.dependencies?.astro) ||
+   after.dependencies?.astro!=='7.4.7' || after.engines?.node!=='26.x')
   throw Error('standalone_toolchain_transform_unsupported');
 }
 

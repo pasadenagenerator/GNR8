@@ -3,14 +3,136 @@
  */
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { loadPinnedRelease } from './load-pinned-release.mjs';
+import { LUMOS_PIN, prepareLumosLibrary } from './prepare-lumos-library.mjs';
+import { NATIVE_ASTRO_TOOLCHAIN_PIN, prepareNativeAstroToolchain } from './native-astro-toolchain.mjs';
 import { configuration, prepareNativeStudio, STACKI_RELEASE_PIN } from './prepare-native-studio.mjs';
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const fail = () => { throw new Error('Confirmed export or Studio binding mismatch'); };
+const MAX_PREPARED_FILES = 10_000;
+const MAX_PREPARED_BYTES = 256_000_000;
+const PREPARED_PACK_BYTES = 8_000_000;
+const PREPARED_PACK_HEADER = Buffer.from('GNR8P1\n');
+/** Store immutable verified bytes with bounded overlap. A partial write is
+ * safe to resume because every object is addressed by its content hash. */
+export async function persistPreparedFileBytes(store, files) {
+  const unique = new Map();
+  for (const file of files) {
+    const hash = digest(file.body);
+    if (unique.has(hash) && !unique.get(hash).equals(file.body)) fail();
+    unique.set(hash, file.body);
+  }
+  const entries = [...unique];
+  let cursor = 0;
+  let failure;
+  await Promise.all(Array.from({ length: Math.min(16, entries.length) }, async () => {
+    while (!failure && cursor < entries.length) {
+      const [hash, body] = entries[cursor++];
+      try { await store.putBytes(hash, body); }
+      catch (error) { failure ??= error; }
+    }
+  }));
+  if (failure) throw failure;
+}
+function packPreparedFiles(files) {
+  const packs = [];
+  const bodies = [];
+  let first = 0;
+  let parts = [PREPARED_PACK_HEADER];
+  let size = PREPARED_PACK_HEADER.length;
+  function flush(end) {
+    if (end === first) return;
+    const body = Buffer.concat(parts, size);
+    packs.push({ sha256: digest(body), bytes: body.length, first, count: end - first });
+    bodies.push({ body });
+    first = end;
+    parts = [PREPARED_PACK_HEADER];
+    size = PREPARED_PACK_HEADER.length;
+  }
+  for (let index = 0; index < files.length; index++) {
+    if (size + files[index].body.length > PREPARED_PACK_BYTES && index > first) flush(index);
+    parts.push(files[index].body);
+    size += files[index].body.length;
+  }
+  flush(files.length);
+  return { packs, bodies };
+}
+async function readPackedFiles(store, entries, packs) {
+  if (!Array.isArray(packs) || !packs.length || packs.length > MAX_PREPARED_FILES) fail();
+  const files = [];
+  for (const pack of packs) {
+    if (!pack || !/^[a-f0-9]{64}$/.test(pack.sha256) ||
+        !Number.isSafeInteger(pack.bytes) || pack.bytes < PREPARED_PACK_HEADER.length ||
+        pack.bytes > 12 * 1024 * 1024 || pack.first !== files.length ||
+        !Number.isSafeInteger(pack.count) || pack.count < 1 ||
+        pack.first + pack.count > entries.length ||
+        PREPARED_PACK_HEADER.length + entries.slice(pack.first, pack.first + pack.count)
+          .reduce((n, entry) => n + entry.bytes, 0) !== pack.bytes) fail();
+    const body = await store.getBytes(pack.sha256);
+    if (!Buffer.isBuffer(body) || body.length !== pack.bytes ||
+        digest(body) !== pack.sha256 ||
+        !body.subarray(0, PREPARED_PACK_HEADER.length).equals(PREPARED_PACK_HEADER)) fail();
+    let offset = PREPARED_PACK_HEADER.length;
+    for (const entry of entries.slice(pack.first, pack.first + pack.count)) {
+      const fileBody = body.subarray(offset, offset + entry.bytes);
+      if (digest(fileBody) !== entry.sha256) fail();
+      files.push({ path: entry.path, body: fileBody });
+      offset += entry.bytes;
+    }
+    if (offset !== body.length) fail();
+  }
+  if (files.length !== entries.length) fail();
+  return files;
+}
+async function pinnedLumosSource() {
+  for (const prefix of ['scripts/stacki', '../scripts/stacki', '../../scripts/stacki']) {
+    const path = resolve(process.cwd(), prefix, 'vendor/lumos-1.0.4');
+    const stat = await lstat(path).catch(error => error.code === 'ENOENT' ? null : Promise.reject(error));
+    if (stat) {
+      if (!stat.isDirectory() || stat.isSymbolicLink()) fail();
+      return path;
+    }
+  }
+  throw Error('Pinned Lumos source unavailable');
+}
+const NATIVE_OVERRIDES = new Set(['package.json', 'package-lock.json', 'astro.config.mjs',
+  '.stacki/folders.json', '.stacki/components.json', '.stacki/styles.json']);
+const REQUIRED_NATIVE_PATHS = ['source-manifest.json', 'package.json', 'package-lock.json',
+  'astro.config.mjs', 'studio/src/cloudflare/site.ts', 'wrangler.json',
+  '.stacki/publish.json', 'src/lumos/LICENSE',
+  'src/lumos/components/Button.astro',
+  'src/lumos/assets/fonts/inter-regular.woff2', '.gnr8/lumos-library.json',
+  '.stacki/folders.json', '.stacki/components.json', '.stacki/styles.json'];
+const EXPORTED_ASTRO_CONFIGS = new Set([
+  'import {defineConfig} from "astro/config";\nexport default defineConfig({output:"static",compressHTML:true});\n',
+  'import {defineConfig} from "astro/config";\nexport default defineConfig({output:"static",compressHTML:true,vite:{build:{cssMinify:false}}});\n',
+]);
+function nativeAstroConfig(site) {
+  const origin = configuration(site).site.studioOrigin;
+  return Buffer.from(`import { defineConfig, fontProviders } from 'astro/config';\n` +
+    `export default defineConfig({\n  output: 'static',\n  compressHTML: true,\n` +
+    `  site: ${JSON.stringify(origin)},\n` +
+    `  fonts: [{ name: 'Inter', cssVariable: '--font-inter', provider: fontProviders.local(),\n` +
+    `    options: { variants: [{ weight: 400, style: 'normal',\n` +
+    `      src: ['./src/lumos/assets/fonts/inter-regular.woff2'] }] } }],\n` +
+    `  vite: { build: { cssMinify: false } },\n});\n`);
+}
+async function prepareNativeAstroConfig(project, site) {
+  const path = join(project, 'astro.config.mjs');
+  if (!EXPORTED_ASTRO_CONFIGS.has(await readFile(path, 'utf8'))) fail();
+  await writeFile(path, nativeAstroConfig(site));
+}
+function preparationBindingSha256(site, access) {
+  const configured = configuration(site, access);
+  return digest(Buffer.from(JSON.stringify({ site: configured.site,
+    ...(configured.access ? { access: configured.access } : {}), files: [...configured.files],
+    release: STACKI_RELEASE_PIN, lumosSourceSha256: LUMOS_PIN.sourceSha256,
+    astroToolchain: NATIVE_ASTRO_TOOLCHAIN_PIN })));
+}
 export async function prepareFromConfirmedExport({ release, files, releaseFile, site }) {
   if (!release?.foundation || !/^[a-f0-9]{64}$/.test(release.foundation.confirmationSha256) ||
       !/^[a-f0-9]{64}$/.test(release.manifestSha256) || !Array.isArray(release.files) ||
@@ -25,10 +147,10 @@ export async function prepareFromConfirmedExport({ release, files, releaseFile, 
 
 /** Local export boundary for a currently confirmed Astro source. The caller
  * must recheck the current capture/Brand certificate before passing the export. */
-export async function prepareFromVerifiedAstroExport({ exported, selection, confirmationSha256, releaseFile, site }) {
+export async function prepareFromVerifiedAstroExport({ exported, selection, confirmationSha256, releaseFile, site, access }) {
   const expectedFiles = verifyAstroExport({ exported, selection, confirmationSha256, site });
   return prepareVerifiedAstroFiles({ files: exported.files, expectedFiles,
-    manifestSha256: exported.manifestSha256, selection, confirmationSha256, releaseFile, site });
+    manifestSha256: exported.manifestSha256, selection, confirmationSha256, releaseFile, site, access });
 }
 
 function verifyAstroExport({ exported, selection, confirmationSha256, site }) {
@@ -61,7 +183,7 @@ function verifyAstroExport({ exported, selection, confirmationSha256, site }) {
   return expectedFiles;
 }
 
-async function prepareVerifiedAstroFiles({ files, expectedFiles, manifestSha256, selection, confirmationSha256, releaseFile, site }) {
+async function prepareVerifiedAstroFiles({ files, expectedFiles, manifestSha256, selection, confirmationSha256, releaseFile, site, access }) {
   const expected = new Map();
   for (const item of expectedFiles) {
     if (!item || typeof item.path !== 'string' || !/^[a-f0-9]{64}$/.test(item.sha256) ||
@@ -90,21 +212,30 @@ async function prepareVerifiedAstroFiles({ files, expectedFiles, manifestSha256,
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, file.body, { flag: 'wx' });
     }
-    const status = await prepareNativeStudio({ project: root, releaseFile, site });
+    const status = await prepareNativeStudio({ project: root, releaseFile, site, access });
+    await prepareNativeAstroToolchain({ project: root });
+    await prepareLumosLibrary({ project: root, upstream: await pinnedLumosSource() });
+    await prepareNativeAstroConfig(root, site);
     const added = [];
     async function collect(directory, prefix = '') {
       for (const entry of await readdir(directory, { withFileTypes: true })) {
         const path = prefix ? `${prefix}/${entry.name}` : entry.name;
         if (entry.isDirectory()) await collect(join(directory, entry.name), path);
-        else if (!files.some(file => file.path === path)) added.push({ path, body: await readFile(join(directory, entry.name)) });
+        else if (NATIVE_OVERRIDES.has(path) ||
+                 !files.some(file => file.path === path))
+          added.push({ path, body: await readFile(join(directory, entry.name)) });
       }
     }
     await collect(root);
     // Runtime draft/update directories and local receipt are not Git source.
-    const output = [...files.filter(file => file.path !== 'vercel.json' && file.path !== 'README.md'),
-      ...added.filter(file => file.path.startsWith('studio/') || file.path === 'cloudflare/site.wrangler.json')];
+    const output = [...files.filter(file => file.path !== 'vercel.json' &&
+      file.path !== 'README.md' && !NATIVE_OVERRIDES.has(file.path)),
+      ...added.filter(file => file.path.startsWith('studio/') ||
+        file.path.startsWith('src/lumos/') ||
+        file.path === '.gnr8/lumos-library.json' ||
+        NATIVE_OVERRIDES.has(file.path) || configuration(site, access).files.has(file.path))];
     output.push({ path: 'README.native-studio.md', body: Buffer.from(
-      `# Native Stacki site\n\nSource export: ${manifestSha256}\nStacki: ${status.version}\n` +
+      `# Native Stacki site\n\nSource export: ${manifestSha256}\nStacki: ${status.version}\nLumos: ${LUMOS_PIN.version}\n` +
       `Repository: ${site.repository}\nBranch: ${site.branch}\n\n` +
       `This is an offline prepared source package. Cloudflare resources, secrets, GitHub App installation, ` +
       `website build pipeline and live revision verification must be configured before hosting or Publish.\n`) });
@@ -128,17 +259,18 @@ export async function prepareFromStoredRelease({ store, releaseId, releaseFile, 
  */
 export async function persistPreparedStudio({ store, releaseId, releaseFile, site, getReleaseFile = () => loadPinnedRelease({ directory: join(tmpdir(), 'gnr8-pinned-stacki') }) }) {
   if (!/^[a-f0-9]{64}$/.test(releaseId)) fail();
-  const bindingSha256 = digest(Buffer.from(JSON.stringify(site)));
+  const bindingSha256 = preparationBindingSha256(site);
   const key = `releases/${releaseId}/native-studio-${bindingSha256}.json`;
   const existing = await store.read(key);
   if (existing) {
     if (existing.format !== 'gnr8-native-studio-derivative:v1' ||
         existing.releaseId !== releaseId || existing.bindingSha256 !== bindingSha256 ||
+        existing.lumosSourceSha256 !== LUMOS_PIN.sourceSha256 ||
+        !isDeepStrictEqual(existing.astroToolchain, NATIVE_ASTRO_TOOLCHAIN_PIN) ||
         !/^[a-f0-9]{64}$/.test(existing.sourceManifestSha256) ||
-        existing.version !== STACKI_RELEASE_PIN.version || !Array.isArray(existing.files) ||
-        existing.files.length > 3000 ||
-        existing.files.reduce((n, file) => n + file.bytes, 0) > 64_000_000 ||
-        new Set(existing.files.map(file => file.path)).size !== existing.files.length) fail();
+        existing.version !== STACKI_RELEASE_PIN.version) fail();
+    validatePreparedEntries(existing.files);
+    if (!REQUIRED_NATIVE_PATHS.every(path => existing.files.some(file => file.path === path))) fail();
     const files = [];
     for (const file of existing.files) {
       const body = await store.getBytes(file.sha256);
@@ -149,9 +281,11 @@ export async function persistPreparedStudio({ store, releaseId, releaseFile, sit
   }
   const prepared = await prepareFromStoredRelease({ store, releaseId, releaseFile: releaseFile ?? await getReleaseFile(), site });
   const files = prepared.files.map(file => ({ path: file.path, sha256: digest(file.body), bytes: file.body.length }));
-  if (files.length > 3000 || files.reduce((total, file) => total + file.bytes, 0) > 64_000_000) fail();
-  for (const file of prepared.files) await store.putBytes(digest(file.body), file.body);
+  if (files.length > MAX_PREPARED_FILES ||
+      files.reduce((total, file) => total + file.bytes, 0) > MAX_PREPARED_BYTES) fail();
+  await persistPreparedFileBytes(store, prepared.files);
   const receipt = { format: 'gnr8-native-studio-derivative:v1', releaseId, bindingSha256,
+    lumosSourceSha256: LUMOS_PIN.sourceSha256, astroToolchain: NATIVE_ASTRO_TOOLCHAIN_PIN,
     sourceManifestSha256: prepared.sourceManifestSha256, version: prepared.status.version, files };
   await store.put(key, receipt);
   return { receipt, files: prepared.files, reused: false };
@@ -159,13 +293,17 @@ export async function persistPreparedStudio({ store, releaseId, releaseFile, sit
 
 /** Target-free immutable derivative. The caller must first verify current
  * capture/Brand/technical acceptance and pass its confirmation SHA. */
-export async function persistVerifiedAstroStudio({ store, exported, selection, confirmationSha256, site,
+export async function persistVerifiedAstroStudio({ store, exported, selection, confirmationSha256, site, access,
   releaseFile, getReleaseFile = () => loadPinnedRelease({ directory: join(tmpdir(), 'gnr8-pinned-stacki') }) }) {
   verifyAstroExport({ exported, selection, confirmationSha256, site });
-  const bindingSha256 = digest(Buffer.from(JSON.stringify(configuration(site).site)));
+  const configured = configuration(site, access);
+  const bindingSha256 = preparationBindingSha256(site, configured.access);
   const sourceManifestSha256 = exported.manifestSha256;
   const identitySha256 = digest(Buffer.from(JSON.stringify({
-    sourceManifestSha256, confirmationSha256, bindingSha256, stackiReleaseSha256: STACKI_RELEASE_PIN.sha256,
+    sourceManifestSha256, confirmationSha256, bindingSha256,
+    stackiReleaseSha256: STACKI_RELEASE_PIN.sha256,
+    lumosSourceSha256: LUMOS_PIN.sourceSha256,
+    astroToolchain: NATIVE_ASTRO_TOOLCHAIN_PIN,
   })));
   const key = `native-sources/${identitySha256}.json`;
   const existing = await store.read(key);
@@ -175,14 +313,29 @@ export async function persistVerifiedAstroStudio({ store, exported, selection, c
         stored.receipt.confirmationSha256 !== confirmationSha256) fail();
     return stored;
   }
-  const prepared = await prepareFromVerifiedAstroExport({ exported, selection, confirmationSha256, site,
-    releaseFile: releaseFile ?? await getReleaseFile() });
+  let prepared;
+  try {
+    prepared = await prepareFromVerifiedAstroExport({ exported, selection, confirmationSha256, site,
+      access: configured.access,
+      releaseFile: releaseFile ?? await getReleaseFile() });
+  } catch { throw Error('native_studio_source_persist_prepare_failed'); }
   const files = prepared.files.map(file => ({ path: file.path, sha256: digest(file.body), bytes: file.body.length }));
   validatePreparedEntries(files);
-  for (const file of prepared.files) await store.putBytes(digest(file.body), file.body);
-  const receipt = { format: 'gnr8-native-studio-source:v1', identitySha256, bindingSha256,
-    sourceManifestSha256, confirmationSha256, version: prepared.status.version, files };
-  if (!isDeepStrictEqual(await store.put(key, receipt), receipt)) fail();
+  const packed = packPreparedFiles(prepared.files);
+  try { await persistPreparedFileBytes(store, packed.bodies); }
+  catch (error) {
+    const code = error instanceof Error && /^(?:standalone_store_unavailable|standalone_file_invalid|standalone_file_unavailable|standalone_file_integrity|standalone_file_write_unconfirmed)$/.test(error.message)
+      ? error.message.slice('standalone_'.length) : 'bytes_failed';
+    throw Error(`native_studio_source_persist_${code}`);
+  }
+  const receipt = { format: configured.access ? 'gnr8-native-studio-source:v2' : 'gnr8-native-studio-source:v1',
+    identitySha256, bindingSha256,
+    sourceManifestSha256, confirmationSha256, version: prepared.status.version,
+    lumosSourceSha256: LUMOS_PIN.sourceSha256,
+    astroToolchain: NATIVE_ASTRO_TOOLCHAIN_PIN,
+    ...(configured.access ? { access: configured.access } : {}), files, packs: packed.packs };
+  try { if (!isDeepStrictEqual(await store.put(key, receipt), receipt)) fail(); }
+  catch { throw Error('native_studio_source_persist_receipt_failed'); }
   return { receipt, files: prepared.files, reused: false };
 }
 
@@ -194,9 +347,18 @@ export async function readStoredVerifiedAstroStudio({ store, sourceId, site }) {
 }
 
 async function verifyStoredStudio({ store, receipt, sourceId, site }) {
-  const bindingSha256 = digest(Buffer.from(JSON.stringify(configuration(site).site)));
-  if (!receipt || receipt.format !== 'gnr8-native-studio-source:v1' ||
+  if (!receipt || !['gnr8-native-studio-source:v1', 'gnr8-native-studio-source:v2'].includes(receipt.format)) fail();
+  const access = receipt.format === 'gnr8-native-studio-source:v2' ? receipt.access : undefined;
+  let configured;
+  try { configured = configuration(site, access); } catch { fail(); }
+  if ((receipt.format === 'gnr8-native-studio-source:v2' && !configured.access) ||
+      (receipt.format === 'gnr8-native-studio-source:v1' && receipt.access !== undefined) ||
+      (configured.access && !isDeepStrictEqual(receipt.access, configured.access))) fail();
+  const bindingSha256 = preparationBindingSha256(site, access);
+  if (
       receipt.identitySha256 !== sourceId || receipt.bindingSha256 !== bindingSha256 ||
+      receipt.lumosSourceSha256 !== LUMOS_PIN.sourceSha256 ||
+      !isDeepStrictEqual(receipt.astroToolchain, NATIVE_ASTRO_TOOLCHAIN_PIN) ||
       !/^[a-f0-9]{64}$/.test(receipt.sourceManifestSha256) ||
       !/^[a-f0-9]{64}$/.test(receipt.confirmationSha256) ||
       receipt.version !== STACKI_RELEASE_PIN.version ||
@@ -204,32 +366,49 @@ async function verifyStoredStudio({ store, receipt, sourceId, site }) {
         sourceManifestSha256: receipt.sourceManifestSha256,
         confirmationSha256: receipt.confirmationSha256,
         bindingSha256, stackiReleaseSha256: STACKI_RELEASE_PIN.sha256,
+        lumosSourceSha256: LUMOS_PIN.sourceSha256,
+        astroToolchain: NATIVE_ASTRO_TOOLCHAIN_PIN,
       }))) !== sourceId) fail();
   validatePreparedEntries(receipt.files);
   const byPath = new Map(receipt.files.map(file => [file.path, file]));
-  if (!['source-manifest.json', 'package.json', 'package-lock.json',
-      'studio/src/cloudflare/site.ts', 'cloudflare/site.wrangler.json']
-      .every(path => byPath.has(path)) ||
+  if (!REQUIRED_NATIVE_PATHS.every(path => byPath.has(path)) ||
+      (configured.access && !['.stacki/roles.json', 'studio/cloudflare/wrangler.jsonc']
+        .every(path => byPath.has(path))) ||
       byPath.get('source-manifest.json').sha256 !== receipt.sourceManifestSha256 ||
+      byPath.get('package.json').sha256 !== NATIVE_ASTRO_TOOLCHAIN_PIN.packageSha256 ||
+      byPath.get('package-lock.json').sha256 !== NATIVE_ASTRO_TOOLCHAIN_PIN.lockSha256 ||
+      byPath.get('astro.config.mjs')?.sha256 !== digest(nativeAstroConfig(site)) ||
       receipt.files.some(file => file.path === 'vercel.json' ||
         file.path.startsWith('api/') || file.path.startsWith('functions/'))) fail();
-  const files = [];
-  for (const file of receipt.files) {
+  const files = receipt.packs === undefined ? [] : await readPackedFiles(store, receipt.files, receipt.packs);
+  if (receipt.packs === undefined) for (const file of receipt.files) {
     const body = await store.getBytes(file.sha256);
     if (!Buffer.isBuffer(body) || body.length !== file.bytes || digest(body) !== file.sha256) fail();
     files.push({ path: file.path, body });
   }
+  if (configured.access && [...configured.files].some(([path, expected]) =>
+    !files.some(file => file.path === path && file.body.equals(Buffer.from(expected))))) fail();
+  let lumosReceipt;
+  try { lumosReceipt = JSON.parse(files.find(file =>
+    file.path === '.gnr8/lumos-library.json').body.toString('utf8')); }
+  catch { fail(); }
+  if (lumosReceipt.format !== 'gnr8-lumos-library:v1' ||
+      !isDeepStrictEqual(lumosReceipt.upstream, LUMOS_PIN) ||
+      !Array.isArray(lumosReceipt.files) || lumosReceipt.files.length === 0 ||
+      lumosReceipt.files.some(file =>
+        !file || typeof file.path !== 'string' ||
+        byPath.get(file.path)?.sha256 !== file.sha256)) fail();
   return { receipt, files, reused: true };
 }
 
 function validatePreparedEntries(files) {
-  if (!Array.isArray(files) || files.length === 0 || files.length > 3000 ||
+  if (!Array.isArray(files) || files.length === 0 || files.length > MAX_PREPARED_FILES ||
       files.some(file => !file || typeof file.path !== 'string' ||
         !/^[A-Za-z0-9_@+.-]+(?:\/[A-Za-z0-9_@+.-]+)*$/.test(file.path) ||
         file.path.split('/').some(part => part === '.' || part === '..' || part === '.git' ||
           part === '.gitattributes' || part === '.gitmodules') ||
         !/^[a-f0-9]{64}$/.test(file.sha256) ||
         !Number.isSafeInteger(file.bytes) || file.bytes < 0 || file.bytes > 12_000_000)) fail();
-  if (files.reduce((n, file) => n + file.bytes, 0) > 64_000_000 ||
+  if (files.reduce((n, file) => n + file.bytes, 0) > MAX_PREPARED_BYTES ||
       new Set(files.map(file => file.path)).size !== files.length) fail();
 }

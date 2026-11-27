@@ -1,0 +1,84 @@
+import 'server-only';
+import { configuredNativeStudioCloudflareCredential } from './native-studio-cloudflare-account-credential';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { SupabasePublicationStore } from './publication-store';
+import type { NativeStudioScope } from './native-studio-binding-store';
+import { inspectBoundNativeStudioGitHubRoles,
+  reconcileBoundNativeStudioGitHubRoles } from './native-studio-github-role-reconciliation';
+import { reconcileNativeStudioAccessOwnerPolicy } from './native-studio-access-policy-reconciliation';
+import { revokeBoundNativeStudioAccessSessions } from './native-studio-access-session-revocation';
+import { SCHEDULED_NATIVE_STUDIO_RECONCILIATION,
+  type NativeStudioReconciliationActor } from './native-studio-reconciliation-authority';
+import { fingerprint } from './publication-contract';
+import { readVerifiedNativeStudioAccessAppV2Binding } from './native-studio-access-app-reservation';
+
+type Environment = Record<string, string | undefined>;
+const HEX32 = /^[a-f0-9]{32}$/;
+const TOKEN = /^[A-Za-z0-9_-]{16,256}$/;
+
+const defaults = {
+  store: (client: SupabaseClient, scope: NativeStudioScope, bucket: string) =>
+    new SupabasePublicationStore(client, bucket, scope),
+  binding: readVerifiedNativeStudioAccessAppV2Binding,
+  inspectRoles: inspectBoundNativeStudioGitHubRoles,
+  policy: reconcileNativeStudioAccessOwnerPolicy,
+  revokeSessions: revokeBoundNativeStudioAccessSessions,
+  writeRoles: reconcileBoundNativeStudioGitHubRoles,
+};
+
+/** Reconcile a changed agency membership against one bound Access v2 studio.
+ * Access is made exact before Git roles are changed. Both provider writers use
+ * durable intents and readbacks, so an ambiguous response never causes a
+ * blind second mutation. This is a trusted job entry point, not a request
+ * handler or proof that existing Access sessions have been revoked.
+ */
+export async function configuredNativeStudioAccessReconciliation(input: {
+  scope: NativeStudioScope; client: SupabaseClient; sourceId: string;
+  actor: NativeStudioReconciliationActor;
+}, env: Environment = process.env, transport: typeof fetch = fetch,
+deps = defaults) {
+  const { scope, client, sourceId, actor } = input;
+  const accountId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ACCOUNT_ID ?? '';
+  const zoneId = env.GNR8_NATIVE_STUDIO_CLOUDFLARE_ZONE_ID ?? '';
+  const credential = configuredNativeStudioCloudflareCredential(env, 'ACCESS_MANAGER');
+  if (env.GNR8_NATIVE_STUDIO_ACCESS_RECONCILE_ENABLED !== '1')
+    throw Error('native_studio_access_reconciliation_disabled');
+  if (!scope || !client || !/^[a-f0-9]{64}$/.test(sourceId) ||
+      !HEX32.test(accountId) || !HEX32.test(zoneId) || !TOKEN.test(credential) ||
+      typeof transport !== 'function')
+    throw Error('native_studio_access_reconciliation_not_configured');
+  const store = deps.store(client, scope,
+    env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes');
+  const bound = await deps.binding({ scope, client, accountId, zoneId, store });
+  const previous = await deps.inspectRoles({ scope, client, store, sourceId, actor },
+    env, transport);
+  const policyProof = await deps.policy({ scope, client, accountId, zoneId,
+    appId: bound.appId, credential, store, actor,
+    previousCommit: previous.headCommit,
+    previousPrincipals: previous.previousPrincipals }, transport);
+  const removed = previous.previousPrincipals.filter(principal =>
+    !policyProof.principals.includes(principal));
+  const sessions = removed.length ? await deps.revokeSessions({ scope, client,
+    store, accountId, zoneId, appId: bound.appId, credential, actor,
+    previousCommit: previous.headCommit,
+    previousPrincipals: previous.previousPrincipals, policyProof }, transport) : null;
+  const roles = await deps.writeRoles({ scope, client, store, sourceId, actor,
+    previous, policyProof }, env, transport);
+  const actorType = actor === SCHEDULED_NATIVE_STUDIO_RECONCILIATION ?
+    'system' as const : 'human' as const;
+  const result = { state: roles.state, scope, sourceId,
+    accessAppId: bound.appId, policyId: policyProof.policyId,
+    commit: roles.commit, principals: policyProof.principals,
+    sessions: sessions?.state ?? 'unchanged', actorType,
+    removedCount: removed.length };
+  if (actorType === 'system') {
+    const audit = { actorType, cause: 'scheduled-access-drift', scope,
+      sourceId, appId: bound.appId, policyId: policyProof.policyId,
+      commit: roles.commit, state: roles.state, sessions: result.sessions,
+      principalCount: policyProof.principals.length,
+      removedCount: removed.length };
+    const identity = fingerprint(audit);
+    await store.put(`native-studio/access-system-result-${identity}.json`, audit);
+  }
+  return result;
+}

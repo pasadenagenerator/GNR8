@@ -9,6 +9,7 @@ import test from 'node:test'
 import {
   __scopedImportPipelineTestUtils,
   materializeCmsContentSlotsForScopedImport,
+  ScopedImportContinuationRequired,
   runScopedImportPipeline,
 } from '@/gnr8/site/scoped-import-pipeline'
 import { buildRenderedHtmlHash } from '@/gnr8/architecture/evidence-capture-expansion'
@@ -16,6 +17,16 @@ import { __runtimeStoreTestUtils } from '@/gnr8/runtime/runtime-store'
 import { computeRuntimeArtifactBundleSha256 } from '@/gnr8/runtime/astro-artifact-materialization'
 import { applyContentOverridesToRawHtml, type ContentOverride, type ContentSlot } from '@/gnr8/runtime/content-binding'
 import { planBatchDraftUpserts } from '@/app/api/gnr8/clients/[clientId]/sites/[siteId]/content/overrides/batch/batch-overrides-route-helpers'
+
+test('discovery excludes malformed source hrefs without dropping valid routes or external URLs', () => {
+  const reason = __scopedImportPipelineTestUtils.malformedDiscoveryHrefReason
+  assert.equal(reason('European Charter for Researchers.'), 'prose_relative_href')
+  assert.equal(reason('/cgp/The%20European%20Code%20of%20Conduct%20for%20Research%20Integrity.'), 'prose_relative_href')
+  assert.equal(reason('www.ihps.si'), 'schemeless_external_host')
+  assert.equal(reason('/project/our-team'), null)
+  assert.equal(reason('/our team'), null)
+  assert.equal(reason('https://euraxess.ec.europa.eu/hrexcellenceaward/european-charter-researchers'), null)
+})
 
 test('Git-backed import rejects the retained CHS failure modes before archiving', () => {
   const snapshot = { fetchManifest: [{ fetchStatus: 'fetch_failed' }] } as any
@@ -34,6 +45,14 @@ test('Git-backed import rejects the retained CHS failure modes before archiving'
   discovery.acquisition.summary.failedRequiredAssetCount = 0
   snapshot.fetchManifest = [{ fetchStatus: 'fetched' }]
   assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), [])
+})
+
+test('Git-backed single-page import accepts its seed capture without multi-page acquisition', () => {
+  const snapshot = { fetchManifest: [{ fetchStatus: 'fetched' }] } as any
+  const discovery = { summary: { enabled: false }, manifest: null, acquisition: null } as any
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), [])
+  discovery.summary.enabled = true
+  assert.deepEqual(__scopedImportPipelineTestUtils.gitCaptureIncompleteReasons(snapshot, discovery), ['html_acquisition_missing'])
 })
 
 test('Git-backed import records stale sitemap pages and missing source scripts without blocking capture', () => {
@@ -1399,6 +1418,7 @@ test('scoped pipeline import can persist seed-only multi-page discovery manifest
 
 test('scoped pipeline multi-page HTML acquisition fetches child evidence without public serving changes', async () => {
   const aboutHtml = '<!doctype html><html><body><h1>About</h1><a href="/article">Article</a></body></html>'
+  let articleRequests = 0
   const server = http.createServer((req, res) => {
     const url = req.url ?? '/'
     if (url === '/about') {
@@ -1407,6 +1427,7 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
       return
     }
     if (url === '/article') {
+      articleRequests += 1
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
       res.end('<!doctype html><html><body><h1>Article</h1></body></html>')
       return
@@ -1466,8 +1487,12 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
     let artifactInput: any = null
     let rawImportFilePaths: string[] = []
     let linkedArtifactId: string | null = null
+    const savedPages = new Map<string, { finalUrl: string; status: number; redirected: boolean; contentType: string | null; bytes: Buffer }>()
+    savedPages.set(`${sourceUrl}article`, { finalUrl: `${sourceUrl}article`, status: 200,
+      redirected: false, contentType: 'text/html; charset=utf-8',
+      bytes: Buffer.from('<!doctype html><html><body><h1>Article</h1></body></html>') })
 
-    const outcome = await runScopedImportPipeline({
+    const pipelineInput = {
       snapshot: {
         snapshotRootDirAbs: root,
         snapshotStableRootDirAbs: root,
@@ -1516,6 +1541,10 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
       } as any,
       sourceUrl,
       actor: 'test:multi-page-acquisition',
+      pageCheckpoint: {
+        loadHtmlPage: async (url) => savedPages.get(url) ?? null,
+        saveHtmlPage: async (url, page) => { savedPages.set(url, page) },
+      },
       multiPageDiscovery: {
         enabled: true,
         acquireHtml: true,
@@ -1583,12 +1612,22 @@ test('scoped pipeline multi-page HTML acquisition fetches child evidence without
         importHtmlToPage: () => ({}) as any,
         migrateImportedPageToCanonicalDraft: async () => ({ siteId: 'legacy-site', siteVersionId: 'legacy-version', versionNo: 1 }),
       },
-    })
+    } as Parameters<typeof runScopedImportPipeline>[0]
+
+    await assert.rejects(
+      runScopedImportPipeline({ ...pipelineInput, pageBatchSize: 1 }),
+      (error: unknown) => error instanceof ScopedImportContinuationRequired && error.completedPages >= 1,
+    )
+    const outcome = await runScopedImportPipeline(pipelineInput)
 
     assert.equal(outcome.mode, 'pipeline')
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.enabled, true)
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.fetchedPageCount, 3)
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.failedPageCount, 1)
+    assert.equal(savedPages.get(`${sourceUrl}about`)?.bytes.toString('utf8'), aboutHtml)
+    assert.equal(savedPages.has(`${sourceUrl}broken`), false)
+    assert.equal(savedPages.has(`${sourceUrl}data`), false)
+    assert.equal(articleRequests, 0)
     assert.equal(outcome.reporting.multiPageDiscovery.htmlAcquisition?.manifestRef, 'importProvenanceSummary.multiPageDiscovery.acquisition')
     assert.ok(outcome.reporting.multiPageDiscovery.htmlAcquisition?.skippedPageCount ?? 0 >= 4)
     assert.equal(outcome.reporting.multiPageDiscovery.rawArtifactAssembly, undefined)
@@ -1891,6 +1930,8 @@ test('scoped pipeline raw multi-page assembly creates deterministic raw artifact
 test('scoped pipeline uses priority-balanced route order for Viroidoc-like acquisition and assembly budgets', async () => {
   const topLevelRoutes = ['/blog', '/people', '/project', '/learn', '/news', '/subscribe']
   const articleRoutes = Array.from({ length: 25 }, (_, index) => `/b/article-${String(index + 1).padStart(2, '0')}`)
+  let inFlightPages = 0
+  let peakInFlightPages = 0
   const server = http.createServer((req, res) => {
     const url = req.url ?? '/'
     if (url === '/robots.txt') {
@@ -1909,12 +1950,17 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
     }
     const routePath = url.split('?')[0] ?? '/'
     if (routePath === '/' || topLevelRoutes.includes(routePath) || articleRoutes.includes(routePath)) {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-      res.end(
-        `<!doctype html><html><body><header><nav>${topLevelRoutes
-          .map((childRoute) => `<a href="${childRoute}">${childRoute}</a>`)
-          .join('')}</nav></header><h1>${routePath}</h1></body></html>`,
-      )
+      inFlightPages += 1
+      peakInFlightPages = Math.max(peakInFlightPages, inFlightPages)
+      setTimeout(() => {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        res.end(
+          `<!doctype html><html><body><header><nav>${topLevelRoutes
+            .map((childRoute) => `<a href="${childRoute}">${childRoute}</a>`)
+            .join('')}</nav></header><h1>${routePath}</h1></body></html>`,
+        )
+        inFlightPages -= 1
+      }, 5)
       return
     }
     res.writeHead(404, { 'content-type': 'text/plain' })
@@ -1934,7 +1980,7 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
       entryAbs,
       `<!doctype html><html><body><header><nav>${topLevelRoutes
         .map((routePath) => `<a href="${routePath}">${routePath}</a>`)
-        .join('')}</nav></header></body></html>`,
+        .join('')}</nav></header><main><a href="European Charter for Researchers.">Charter</a><a href="www.ihps.si">IHPS</a></main></body></html>`,
       'utf8',
     )
 
@@ -2077,6 +2123,11 @@ test('scoped pipeline uses priority-balanced route order for Viroidoc-like acqui
       assert.equal(assembledRoutes.includes(routePath), true, `${routePath} should be assembled`)
     }
     assert.deepEqual(skippedTopLevelRoutes, [])
+    assert.equal(multiPage.manifest.skippedLinks.some((entry: any) =>
+      entry.originalHref === 'European Charter for Researchers.' && entry.skippedReason === 'prose_relative_href'), true)
+    assert.equal(multiPage.manifest.skippedLinks.some((entry: any) =>
+      entry.originalHref === 'www.ihps.si' && entry.skippedReason === 'schemeless_external_host'), true)
+    assert.equal(peakInFlightPages, 4)
 
     const firstArticleAcquisitionIndex = acquiredRoutes.findIndex((routePath: string) => routePath.startsWith('/b/'))
     const lastRequiredTopLevelIndex = Math.max(...['/blog', '/people', '/project', '/learn', '/news'].map((routePath) => acquiredRoutes.indexOf(routePath)))

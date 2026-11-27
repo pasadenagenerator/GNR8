@@ -1,0 +1,125 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { createHash } from 'node:crypto';
+import { inngest } from '@/gnr8/inngest/client';
+import { NATIVE_STUDIO_FIRST_OPEN_EVENT } from './native-studio-first-open-job';
+
+export const NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID = 'native-studio-public-gateway-job';
+export const NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT =
+  'gnr8/native-studio.public-gateway.requested';
+const MAX_OBSERVATIONS = 30;
+const OBSERVATION_INTERVAL = '1m';
+
+type Scope = { agencyId: string; clientId: string; siteId: string };
+type Request = { scope: Scope; actor: string; sourceId: string;
+  sourceCommit: string; workerId: string; artifactCommit: string };
+type Artifact = { sourceId: string; sourceCommit: string; workerId: string;
+  artifactCommit: string; branch: string };
+type PublicProgress = { state: 'running' | 'pending-review' |
+  'first-open-required'; commit: string; observation?: string };
+const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
+const SOURCE = /^[a-f0-9]{64}$/;
+const COMMIT = /^[a-f0-9]{40,64}$/;
+const WORKER = /^[a-f0-9]{32}$/;
+
+const defaults = {
+  enabled: () => process.env.GNR8_NATIVE_STUDIO_PUBLIC_GATEWAY_ENABLED === '1',
+  client: async () => {
+    const { getSupabaseServiceRoleClient } = await import('@/src/supabase/service-role-server');
+    return getSupabaseServiceRoleClient();
+  },
+  authorize: async (client: SupabaseClient, actor: string, agencyId: string) => {
+    const { requireAgencyBackgroundActor } = await import('@/src/auth/agency-background-action');
+    await requireAgencyBackgroundActor(client, { userId: actor, agencyId, action: 'publish' });
+  },
+  artifact: async (scope: Scope, client: SupabaseClient) => {
+    const { SupabasePublicationStore } = await import('@/gnr8/standalone/publication-store');
+    const store = new SupabasePublicationStore(client,
+      process.env.GNR8_ASTRO_CANDIDATE_OBJECT_BUCKET ?? 'gnr8-astro-candidate-routes', scope);
+    return store.read<Artifact>('native-studio/build-artifact-github-push-v1.json');
+  },
+  publish: async (request: Request, client: SupabaseClient) => {
+    const { configuredNativeStudioStoredPublicDeploy } = await import(
+      '@/gnr8/standalone/native-studio-stored-public-deploy');
+    return configuredNativeStudioStoredPublicDeploy({ scope: request.scope, client,
+      sourceId: request.sourceId, sourceCommit: request.sourceCommit,
+      workerId: request.workerId });
+  },
+  chainEnabled: () => process.env.GNR8_NATIVE_STUDIO_FIRST_OPEN_ENABLED === '1',
+  enqueueFirstOpen: async (request: { scope: Scope; actor: string;
+    sourceId: string; sourceCommit: string }) => {
+    const identity = [request.scope.agencyId, request.scope.clientId,
+      request.scope.siteId, request.sourceId, request.sourceCommit];
+    const id = `gnr8-native-studio-first-open-${createHash('sha256')
+      .update(JSON.stringify(identity)).digest('hex')}`;
+    await inngest.send({ id, name: NATIVE_STUDIO_FIRST_OPEN_EVENT,
+      data: request });
+  },
+};
+
+/** The event cannot select the public Worker or domain. Both are re-read from
+ * the scoped reservation and checked against the live Studio and vacancy. */
+export async function runNativeStudioPublicGateway(request: unknown,
+  deps: typeof defaults = defaults): Promise<PublicProgress> {
+  if (!deps.enabled()) throw Error('native_studio_public_gateway_disabled');
+  if (!request || typeof request !== 'object' || Array.isArray(request) ||
+      Object.keys(request).sort().join() !==
+        'actor,artifactCommit,scope,sourceCommit,sourceId,workerId')
+    throw Error('native_studio_public_gateway_request_invalid');
+  const { scope, actor, sourceId, sourceCommit, workerId, artifactCommit } = request as Request;
+  if (!scope || typeof scope !== 'object' || Array.isArray(scope) ||
+      Object.keys(scope).sort().join() !== 'agencyId,clientId,siteId' ||
+      typeof actor !== 'string' || !UUID.test(actor) ||
+      ![scope.agencyId, scope.clientId, scope.siteId].every(
+        value => typeof value === 'string' && UUID.test(value)) ||
+      typeof sourceId !== 'string' || !SOURCE.test(sourceId) ||
+      typeof sourceCommit !== 'string' || !COMMIT.test(sourceCommit) ||
+      typeof workerId !== 'string' || !WORKER.test(workerId) ||
+      typeof artifactCommit !== 'string' || !COMMIT.test(artifactCommit))
+    throw Error('native_studio_public_gateway_request_invalid');
+  const client = await deps.client();
+  if (!client) throw Error('native_studio_public_gateway_store_unavailable');
+  await deps.authorize(client, actor, scope.agencyId);
+  const artifact = await deps.artifact(scope, client);
+  if (artifact?.sourceId !== sourceId || artifact.sourceCommit !== sourceCommit ||
+      artifact.workerId !== workerId || artifact.artifactCommit !== artifactCommit ||
+      artifact.branch !== `gnr8-build-${sourceCommit}`)
+    throw Error('native_studio_public_gateway_artifact_unverified');
+  const result = await deps.publish({ scope, actor, sourceId, sourceCommit,
+    workerId, artifactCommit }, client);
+  if (result.commit !== sourceCommit)
+    throw Error('native_studio_public_gateway_result_unverified');
+  if (deps.chainEnabled() && result.state === 'first-open-required' &&
+      result.observation === 'observed-control-plane')
+    await deps.enqueueFirstOpen({ scope, actor, sourceId, sourceCommit });
+  return result;
+}
+
+export const nativeStudioPublicGatewayJob = inngest.createFunction({
+  id: NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID, retries: 1,
+  concurrency: { limit: 1, key: 'event.data.scope.siteId' },
+}, { event: NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT },
+async ({ event, step }) => settleNativeStudioPublicGateway(event.data, step));
+
+/** Observe an accepted public deploy as the Cloudflare control plane catches
+ * up. The scoped attempt prevents a second deployment on later observations. */
+export async function settleNativeStudioPublicGateway(
+  request: unknown,
+  steps: { run: (id: string, fn: () => Promise<unknown>) => Promise<unknown>;
+    sleep: (id: string, duration: string) => Promise<unknown> },
+  run: typeof runNativeStudioPublicGateway = runNativeStudioPublicGateway,
+) {
+  for (let index = 0; index < MAX_OBSERVATIONS; index++) {
+    const result = await steps.run(`public-gateway-observe-${index}`,
+      () => run(request)) as Awaited<ReturnType<typeof runNativeStudioPublicGateway>>;
+    const continuing = result.state === 'running' ||
+      (result.state === 'pending-review' &&
+        ['pending', 'readback-unavailable'].includes(result.observation ?? ''));
+    if (result.state === 'running' && index === MAX_OBSERVATIONS - 1)
+      return { state: 'pending-review', commit: result.commit,
+        observation: 'execution-timeout' };
+    if (!continuing || index === MAX_OBSERVATIONS - 1)
+      return result;
+    await steps.sleep(`public-gateway-wait-${index}`, OBSERVATION_INTERVAL);
+  }
+  throw Error('native_studio_public_gateway_observation_exhausted');
+}

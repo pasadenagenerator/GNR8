@@ -83,6 +83,13 @@ export class GitHubStackiStore {
   }
   /** Import preflight: verifies the exact private, site-owned repository only. */
   async verifyTarget(): Promise<void> { await this.repository(); }
+  /** Legacy site targets need the provider's owner kind before a durable binding is written. */
+  async verifiedOwnerKind(): Promise<'User' | 'Organization'> {
+    const repo = await this.repository();
+    if (repo.owner?.type !== 'User' && repo.owner?.type !== 'Organization')
+      throw new StackiDraftError(503, 'STACKI_GITHUB_TARGET_MISMATCH');
+    return repo.owner.type;
+  }
   /** Resolve immutable parent and an optional already-written import branch. */
   async rawImportRepository(siteVersionId: string): Promise<{defaultBranch:string;parent:string;existingCommit?:string}> {
     if (!/^[a-f0-9-]{36}$/.test(siteVersionId))

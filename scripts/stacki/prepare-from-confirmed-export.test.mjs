@@ -1,19 +1,34 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm, symlink, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, symlink, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { prepareGitBranch, commitPreparedStudio, prepareGitBranchFromSource, commitPreparedSource } from './prepare-git-branch.mjs';
+import { prepareGitBranch, commitPreparedStudio, prepareGitBranchFromSource, commitPreparedSource,
+  verifyCommittedStudioSource } from './prepare-git-branch.mjs';
 import { createHash } from 'node:crypto';
 import { exportStandaloneProject } from '../../apps/platform/gnr8/standalone/standalone-export.ts';
-import { prepareFromConfirmedExport, prepareFromVerifiedAstroExport, prepareFromStoredRelease, persistPreparedStudio, persistVerifiedAstroStudio, readStoredVerifiedAstroStudio } from './prepare-from-confirmed-export.mjs';
+import { prepareFromConfirmedExport, prepareFromVerifiedAstroExport, prepareFromStoredRelease, persistPreparedFileBytes, persistPreparedStudio, persistVerifiedAstroStudio, readStoredVerifiedAstroStudio } from './prepare-from-confirmed-export.mjs';
 const sha = value => createHash('sha256').update(value).digest('hex');
 const id = '11111111-1111-4111-8111-111111111111';
 const scope = { agencyId: id, clientId: id, siteId: id, siteVersionId: id };
 const site = { siteId: id, repository: 'example/website', repositoryId: '123', branch: 'main',
   studioOrigin: 'https://website.example.com', accountId: 'a'.repeat(32), appId: '456', installationId: '789', clientId: 'Iv1.example' };
 const releaseFile = process.env.STACKI_RELEASE_FILE;
+test('prepared immutable bytes are deduplicated and stored with bounded overlap',async()=>{
+  let active=0,maxActive=0;
+  const seen=[];
+  const store={putBytes:async(hash,body)=>{
+    active++;maxActive=Math.max(maxActive,active);
+    await new Promise(resolve=>setTimeout(resolve,1));
+    seen.push(hash);assert.equal(hash,sha(body));active--;
+  }};
+  const files=Array.from({length:25},(_,index)=>({body:Buffer.from(`file-${index}`)}));
+  files.push({body:files[0].body});
+  await persistPreparedFileBytes(store,files);
+  assert.equal(seen.length,25);
+  assert(maxActive>8&&maxActive<=16);
+});
 async function fixture() {
   const baseline = [
     { path: 'package.json', base64: Buffer.from('{"dependencies":{"astro":"5.18.2"}}').toString('base64') },
@@ -34,6 +49,16 @@ test('verified Astro export prepares the same offline Studio without a Vercel re
   assert.deepEqual(direct, legacy);
   assert.equal(direct.status.hosted, false);
   assert.equal(direct.confirmationSha256, release.foundation.confirmationSha256);
+  const native = new Map(direct.files.map(file => [file.path, file.body]));
+  assert.equal(JSON.parse(native.get('package.json')).dependencies.astro, '7.4.7');
+  assert.equal(JSON.parse(native.get('package-lock.json')).packages['node_modules/astro'].version, '7.4.7');
+  assert.match(native.get('astro.config.mjs').toString(), /site: "https:\/\/website\.example\.com"/);
+  assert.match(native.get('astro.config.mjs').toString(), /cssVariable: '--font-inter'/);
+  assert.equal(native.get('src/pages/index.astro').toString(), '<h1>Approved import</h1>');
+  assert(native.has('src/lumos/components/Button.astro'));
+  assert(native.has('src/lumos/assets/fonts/inter-regular.woff2'));
+  assert(native.has('.stacki/components.json'));
+  assert.equal(JSON.parse(native.get('.gnr8/lumos-library.json')).upstream.version, '1.0.4');
   await assert.rejects(prepareFromVerifiedAstroExport({
     exported: { ...exported, files: files.map(file => file.path === 'src/pages/index.astro' ?
       { ...file, body: Buffer.from('altered') } : file) },
@@ -70,7 +95,11 @@ test('target-free Studio source persists once and binds export, confirmation and
   assert.equal(objects.size, 1);
   assert.equal(first.receipt.confirmationSha256, request.confirmationSha256);
   assert.equal(first.receipt.sourceManifestSha256, exported.manifestSha256);
+  assert.match(first.receipt.lumosSourceSha256, /^[a-f0-9]{64}$/);
+  assert.equal(first.receipt.astroToolchain.version, '7.4.7');
   assert.equal(first.receipt.files.some(file => file.path === 'vercel.json'), false);
+  assert(first.receipt.packs.length > 0);
+  assert(first.receipt.packs.every(pack => pack.bytes <= 12 * 1024 * 1024));
   const different = await persistVerifiedAstroStudio({ ...request, confirmationSha256: 'd'.repeat(64) });
   assert.notEqual(different.receipt.identitySha256, first.receipt.identitySha256);
   assert.equal(objects.size, 2);
@@ -85,11 +114,66 @@ test('target-free Studio source persists once and binds export, confirmation and
   objects.set(key, { ...original, files: [{ path: '.git/config', sha256: sha(Buffer.from('bad')), bytes: 3 }] });
   await assert.rejects(readStoredVerifiedAstroStudio({ store, sourceId:first.receipt.identitySha256, site }), /mismatch/);
   objects.set(key, original);
-  const file = first.receipt.files.find(item => item.path === 'src/pages/index.astro');
-  bytes.set(file.sha256, Buffer.from('tampered'));
+  const legacy = { ...original };
+  delete legacy.packs;
+  for (const file of first.files) bytes.set(sha(file.body), file.body);
+  objects.set(key, legacy);
+  assert.deepEqual((await readStoredVerifiedAstroStudio({ store, sourceId:first.receipt.identitySha256, site })).files, first.files);
+  objects.set(key, original);
+  bytes.set(first.receipt.packs[0].sha256, Buffer.from('tampered'));
   await assert.rejects(persistVerifiedAstroStudio(request), /mismatch/);
   assert.equal(objects.size, 3);
 });
+
+test('Access source binds verified roles and Worker settings without changing legacy source',
+  { skip: !releaseFile && 'Set STACKI_RELEASE_FILE' }, async t => {
+    const { release, exported } = await fixture();
+    const objects = new Map(), bytes = new Map();
+    const store = {
+      read: async key => objects.get(key) ?? null,
+      getBytes: async hash => bytes.get(hash),
+      putBytes: async (hash, body) => { bytes.set(hash, body); },
+      put: async (key, value) => { objects.set(key, value); return value; },
+    };
+    const request = { store, exported, selection: release.input.selection,
+      confirmationSha256: release.foundation.confirmationSha256, site, releaseFile };
+    const legacy = await persistVerifiedAstroStudio(request);
+    const access = { version: 2, provider: 'access', aud: 'b'.repeat(64),
+      teamDomain: 'gnr8.cloudflareaccess.com',
+      admins: ['access:owner@example.com', 'access:admin@example.com'] };
+    const first = await persistVerifiedAstroStudio({ ...request, access });
+    const again = await persistVerifiedAstroStudio({ ...request, access: {
+      ...access, admins: [...access.admins].reverse() } });
+    assert.equal(first.receipt.format, 'gnr8-native-studio-source:v2');
+    assert.equal(again.reused, true);
+    assert.notEqual(first.receipt.identitySha256, legacy.receipt.identitySha256);
+    assert.deepEqual(first.receipt.access.admins, ['access:admin@example.com', 'access:owner@example.com']);
+    const files = new Map(first.files.map(file => [file.path, file.body]));
+    assert.deepEqual(JSON.parse(files.get('.stacki/roles.json')).roles[0].members, first.receipt.access.admins);
+    assert.equal(JSON.parse(files.get('studio/cloudflare/wrangler.jsonc')).vars.ACCESS_AUD, access.aud);
+    assert.equal((await readStoredVerifiedAstroStudio({ store, sourceId: first.receipt.identitySha256, site })).reused, true);
+    const root = await mkdtemp(join(tmpdir(), 'gnr8-access-source-git-'));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
+    git('init', '-q', '-b', site.branch);
+    git('config', 'user.name', 'Local Test');
+    git('config', 'user.email', 'local@example.com');
+    git('remote', 'add', 'origin', 'https://github.com/example/website.git');
+    git('commit', '-q', '--allow-empty', '-m', 'Initialize');
+    const staged = { project: root, store, sourceId: first.receipt.identitySha256, site };
+    await prepareGitBranchFromSource(staged);
+    assert.deepEqual(JSON.parse(await readFile(join(root, '.stacki/roles.json')))
+      .roles[0].members, first.receipt.access.admins);
+    await commitPreparedSource({ ...staged, author: { name: 'Local Test', email: 'local@example.com' } });
+    assert.equal((await verifyCommittedStudioSource(staged)).sourceId, first.receipt.identitySha256);
+    const key = `native-sources/${first.receipt.identitySha256}.json`;
+    const original = objects.get(key);
+    objects.set(key, { ...original, access: { ...original.access, aud: 'c'.repeat(64) } });
+    await assert.rejects(readStoredVerifiedAstroStudio({ store, sourceId: first.receipt.identitySha256, site }), /mismatch/);
+    objects.set(key, original);
+    bytes.set(first.receipt.packs[0].sha256, Buffer.from('{}'));
+    await assert.rejects(readStoredVerifiedAstroStudio({ store, sourceId: first.receipt.identitySha256, site }), /mismatch/);
+  });
 
 test('target-free stored package stages and commits only on its dedicated local branch',
  { skip: !releaseFile && 'Set STACKI_RELEASE_FILE' }, async t => {
@@ -119,6 +203,32 @@ test('target-free stored package stages and commits only on its dedicated local 
   const committed = await commitPreparedSource({ ...request, author:{name:'Local Test',email:'local@example.com'} });
   assert.match(committed.commit,/^[a-f0-9]{40}$/);
   assert.deepEqual(await commitPreparedSource({ ...request, author:{name:'Local Test',email:'local@example.com'} }),committed);
+  const checked = await verifyCommittedStudioSource(request);
+  assert.deepEqual(checked, { sourceId, commit: committed.commit, branch: site.branch,
+    repository: site.repository, files: saved.files.length, hosted: false });
+  await mkdir(join(root, 'dist'));
+  await writeFile(join(root, 'dist/index.html'), '<main>built</main>');
+  await assert.rejects(verifyCommittedStudioSource(request), /local changes/);
+  assert.equal((await verifyCommittedStudioSource({ ...request,
+    allowBuildOutputs: true })).commit, committed.commit);
+  await writeFile(join(root, 'outside-build.txt'), 'untracked');
+  await assert.rejects(verifyCommittedStudioSource({ ...request,
+    allowBuildOutputs: true }), /local changes/);
+  await rm(join(root, 'outside-build.txt'));
+  await rm(join(root, 'dist'), { recursive: true });
+  const page = join(root, 'src/pages/index.astro');
+  await writeFile(page, 'uncommitted edit');
+  await assert.rejects(verifyCommittedStudioSource(request), /local changes/);
+  await writeFile(page, saved.files.find(file => file.path === 'src/pages/index.astro').body);
+  git('update-index', '--assume-unchanged', 'src/pages/index.astro');
+  await writeFile(page, 'hidden local edit');
+  await assert.rejects(verifyCommittedStudioSource(request), /checkout file differs/);
+  await writeFile(page, saved.files.find(file => file.path === 'src/pages/index.astro').body);
+  git('update-index', '--no-assume-unchanged', 'src/pages/index.astro');
+  await writeFile(join(root, 'studio/unmanaged.txt'), 'unmanaged');
+  await assert.rejects(verifyCommittedStudioSource(request), /local changes/);
+  await rm(join(root, 'studio/unmanaged.txt'));
+  assert.equal((await verifyCommittedStudioSource(request)).commit, committed.commit);
   await assert.rejects(prepareGitBranchFromSource({ ...request, site:{ ...site,repository:'example/other' } }),/differs/);
   await writeFile(join(root,'.git/info/attributes'),'*.astro filter=custom\n');
   await assert.rejects(prepareGitBranchFromSource(request),/Git filters/);
@@ -161,7 +271,7 @@ test('confirmed export bytes and repository identity yield repeatable native Stu
   assert.equal(one.files.some(file => file.path === 'vercel.json'), false);
   assert(one.files.some(file => file.path === 'README.native-studio.md'));
   assert.deepEqual(one.files.find(file => file.path === 'source-manifest.json')?.body, files.find(file => file.path === 'source-manifest.json')?.body);
-  assert(one.files.some(file => file.path === 'cloudflare/site.wrangler.json'));
+  assert(one.files.some(file => file.path === 'wrangler.json'));
   assert.deepEqual(one.files.find(file => file.path === 'src/pages/index.astro')?.body, files.find(file => file.path === 'src/pages/index.astro')?.body);
   assert.equal(one.files.some(file => file.path === '.gnr8/native-studio.json'), false);
   await assert.rejects(prepareFromConfirmedExport({ release, files: files.map(file => file.path === 'src/pages/index.astro' ? { ...file, body: Buffer.from('changed') } : file), releaseFile, site }), /mismatch/);

@@ -1,4 +1,35 @@
 import { nativeStudioPreparationJob } from '@/gnr8/site/inngest/native-studio-preparation-job'
+import { nativeStudioFirstBuildJob, NATIVE_STUDIO_FIRST_BUILD_EVENT,
+  NATIVE_STUDIO_FIRST_BUILD_JOB_ID } from '@/gnr8/site/inngest/native-studio-first-build-job'
+import { nativeStudioFirstDeployPreflightJob,
+  NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT,
+  NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_JOB_ID } from
+  '@/gnr8/site/inngest/native-studio-first-deploy-preflight-job'
+import { nativeStudioFirstDeployJob, NATIVE_STUDIO_FIRST_DEPLOY_EVENT,
+  NATIVE_STUDIO_FIRST_DEPLOY_JOB_ID } from
+  '@/gnr8/site/inngest/native-studio-first-deploy-job'
+import { nativeStudioImageBuildJob, NATIVE_STUDIO_IMAGE_BUILD_EVENT,
+  NATIVE_STUDIO_IMAGE_BUILD_JOB_ID } from
+  '@/gnr8/site/inngest/native-studio-image-build-job'
+import { nativeStudioImagePushJob, NATIVE_STUDIO_IMAGE_PUSH_EVENT,
+  NATIVE_STUDIO_IMAGE_PUSH_JOB_ID } from
+  '@/gnr8/site/inngest/native-studio-image-push-job'
+import { nativeStudioPublicGatewayJob, NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT,
+  NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID } from
+  '@/gnr8/site/inngest/native-studio-public-gateway-job'
+import { nativeStudioFirstOpenJob, NATIVE_STUDIO_FIRST_OPEN_EVENT,
+  NATIVE_STUDIO_FIRST_OPEN_JOB_ID } from
+  '@/gnr8/site/inngest/native-studio-first-open-job'
+import { nativeStudioAccessReconciliationJob,
+  NATIVE_STUDIO_ACCESS_RECONCILIATION_EVENT,
+  NATIVE_STUDIO_ACCESS_RECONCILIATION_JOB_ID } from
+  '@/gnr8/site/inngest/native-studio-access-reconciliation-job'
+import { nativeStudioAccessScheduledJob, NATIVE_STUDIO_ACCESS_SCHEDULED_JOB_ID } from
+  '@/gnr8/site/inngest/native-studio-access-scheduled-job'
+import { nativeStudioSecretSetupJob, NATIVE_STUDIO_SECRET_SETUP_EVENT,
+  NATIVE_STUDIO_SECRET_SETUP_JOB_ID } from '@/gnr8/site/inngest/native-studio-secret-setup-job'
+import { nativeStudioResourceReservationJob, NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT,
+  NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID } from '@/gnr8/site/inngest/native-studio-resource-reservation-job'
 import { standalonePublicationJob } from '@/gnr8/site/inngest/standalone-publication-job'
 import {
   CANONICAL_DOMAIN_VERIFICATION_CHECK_EVENT,
@@ -43,6 +74,17 @@ export type WorkerInngestFunctionRegistration = {
   eventName?: string
   fn:
     | typeof nativeStudioPreparationJob
+    | typeof nativeStudioFirstBuildJob
+    | typeof nativeStudioFirstDeployPreflightJob
+    | typeof nativeStudioImageBuildJob
+    | typeof nativeStudioImagePushJob
+    | typeof nativeStudioFirstDeployJob
+    | typeof nativeStudioPublicGatewayJob
+    | typeof nativeStudioFirstOpenJob
+    | typeof nativeStudioAccessReconciliationJob
+    | typeof nativeStudioAccessScheduledJob
+    | typeof nativeStudioSecretSetupJob
+    | typeof nativeStudioResourceReservationJob
     | typeof standalonePublicationJob
     | typeof templateProcessingJob
     | typeof siteTemplateBootstrapJob
@@ -54,6 +96,36 @@ export type WorkerInngestFunctionRegistration = {
 
 const coreWorkerInngestFunctionRegistrations: WorkerInngestFunctionRegistration[] = [
   { id: "native-studio-preparation-job", eventName: "gnr8/native-studio.prepare.requested", fn: nativeStudioPreparationJob },
+  { id: NATIVE_STUDIO_FIRST_BUILD_JOB_ID, eventName: NATIVE_STUDIO_FIRST_BUILD_EVENT,
+    fn: nativeStudioFirstBuildJob },
+  { id: NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_JOB_ID,
+    eventName: NATIVE_STUDIO_FIRST_DEPLOY_PREFLIGHT_EVENT,
+    fn: nativeStudioFirstDeployPreflightJob },
+  { id: NATIVE_STUDIO_IMAGE_BUILD_JOB_ID,
+    eventName: NATIVE_STUDIO_IMAGE_BUILD_EVENT,
+    fn: nativeStudioImageBuildJob },
+  { id: NATIVE_STUDIO_IMAGE_PUSH_JOB_ID,
+    eventName: NATIVE_STUDIO_IMAGE_PUSH_EVENT,
+    fn: nativeStudioImagePushJob },
+  { id: NATIVE_STUDIO_FIRST_DEPLOY_JOB_ID,
+    eventName: NATIVE_STUDIO_FIRST_DEPLOY_EVENT,
+    fn: nativeStudioFirstDeployJob },
+  { id: NATIVE_STUDIO_PUBLIC_GATEWAY_JOB_ID,
+    eventName: NATIVE_STUDIO_PUBLIC_GATEWAY_EVENT,
+    fn: nativeStudioPublicGatewayJob },
+  { id: NATIVE_STUDIO_FIRST_OPEN_JOB_ID,
+    eventName: NATIVE_STUDIO_FIRST_OPEN_EVENT,
+    fn: nativeStudioFirstOpenJob },
+  { id: NATIVE_STUDIO_ACCESS_RECONCILIATION_JOB_ID,
+    eventName: NATIVE_STUDIO_ACCESS_RECONCILIATION_EVENT,
+    fn: nativeStudioAccessReconciliationJob },
+  { id: NATIVE_STUDIO_ACCESS_SCHEDULED_JOB_ID,
+    fn: nativeStudioAccessScheduledJob },
+  { id: NATIVE_STUDIO_SECRET_SETUP_JOB_ID, eventName: NATIVE_STUDIO_SECRET_SETUP_EVENT,
+    fn: nativeStudioSecretSetupJob },
+  { id: NATIVE_STUDIO_RESOURCE_RESERVATION_JOB_ID,
+    eventName: NATIVE_STUDIO_RESOURCE_RESERVATION_EVENT,
+    fn: nativeStudioResourceReservationJob },
   { id: "standalone-publication-job", eventName: "gnr8/standalone.prepare.requested", fn: standalonePublicationJob },
   {
     id: SITE_ASTRO_GENERATION_JOB_ID,

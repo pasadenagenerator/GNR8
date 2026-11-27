@@ -105,13 +105,29 @@ test('immutable runtime dependencies do not consume editable checkpoint limits',
  await assert.rejects(prepareStackiSourceProject({...unsafe,assetMode:'runtime-overlay'}),/SOURCE_PROJECT_INVALID/);
 });
 
-test('current Astro 7 source can become an editable baseline without an obsolete upgrade',async()=>{
+test('generated Astro 7 source gets an exact Node 26 baseline, then remains stable',async()=>{
  const f=fixture();
  const project=await prepareStackiSourceProject({...f,assetMode:'runtime-overlay'});
  const baseline=prepareStackiAstro7Baseline({files:project.files,expectedSourceSnapshotSha256:f.binding.sourceSnapshotSha256});
- assert.deepEqual(baseline.files,project.files);
- assert.deepEqual(baseline.changedPaths,[]);
+ assert.deepEqual(baseline.changedPaths,['package.json','astro.config.mjs']);
+ assert.equal(JSON.parse(Buffer.from(baseline.files.find(file=>file.path==='package.json')!.base64,'base64').toString()).engines.node,'26.13.0');
  assert.equal(baseline.derivedFromSourceSnapshot.aggregateSha256,f.binding.sourceSnapshotSha256);
+ const retry=prepareStackiAstro7Baseline({files:baseline.files,expectedSourceSnapshotSha256:baseline.sourceSnapshot.aggregateSha256});
+ assert.deepEqual(retry.changedPaths,[]);
+ assert.deepEqual(retry.files,baseline.files);
+});
+
+test('older Astro 7 generated source becomes a new 7.4.7 baseline with distinct source bytes', async () => {
+ const f=fixture();
+ const project=await prepareStackiSourceProject({...f,assetMode:'runtime-overlay'});
+ const older=project.files.map(file=>file.path==='package.json' ? {
+   ...file,base64:Buffer.from(Buffer.from(file.base64,'base64').toString().replace('7.4.7','7.4.4')).toString('base64'),
+ } : file);
+ const source=createAstroStaticSiteSourceSnapshot(older.map(file=>({path:file.path,body:Buffer.from(file.base64,'base64')})));
+ const baseline=prepareStackiAstro7Baseline({files:older,expectedSourceSnapshotSha256:source.aggregateSha256});
+ assert.equal(JSON.parse(Buffer.from(baseline.files.find(file=>file.path==='package.json')!.base64,'base64').toString()).dependencies.astro,'7.4.7');
+ assert.deepEqual(baseline.changedPaths,['package.json','astro.config.mjs']);
+ assert.notEqual(baseline.sourceSnapshot.aggregateSha256,source.aggregateSha256);
 });
 
 test('explicit Astro 7 baseline preserves every unrelated byte and binds the old source hash', async () => {
@@ -135,7 +151,7 @@ test('explicit Astro 7 baseline preserves every unrelated byte and binds the old
   const unknown=files.map(f=>f.path==='astro.config.mjs'?{...f,base64:Buffer.from('export default {}').toString('base64')}:f);
   assert.throws(()=>prepareStackiAstro7Baseline({files:unknown,expectedSourceSnapshotSha256:createAstroStaticSiteSourceSnapshot(unknown.map(f=>({path:f.path,body:Buffer.from(f.base64,'base64')}))).aggregateSha256}));
   assert.notEqual(result.sourceSnapshot.aggregateSha256, snapshot.aggregateSha256);
-  assert.equal(JSON.parse(Buffer.from(result.files.find(f=>f.path==='package.json')!.base64, 'base64').toString()).dependencies.astro, '7.4.4');
+  assert.equal(JSON.parse(Buffer.from(result.files.find(f=>f.path==='package.json')!.base64, 'base64').toString()).dependencies.astro, '7.4.7');
   assert.equal(result.derivedFromSourceSnapshot.aggregateSha256, snapshot.aggregateSha256);
   const { createStackiRecord } = await import('./stacki-draft-contract');
   const { selectStackiCandidateSource } = await import('./stacki-candidate-source');

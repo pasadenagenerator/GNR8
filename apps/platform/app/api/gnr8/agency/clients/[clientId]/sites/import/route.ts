@@ -16,18 +16,22 @@ import { stackiGithubSelected } from '@/gnr8/stacki/stacki-github-config'
 import { SiteGitHubRepositoryBinding } from '@/gnr8/stacki/site-github-repository-binding'
 import { SiteGitHubRepositoryProvisioner } from '@/gnr8/stacki/site-github-repository-provisioner'
 import { getSupabaseServiceRoleClient } from '@/src/supabase/service-role-server'
+import { inngest } from '@/gnr8/inngest/client'
 import { lookupImportOwnershipSiteId } from '@/gnr8/site/site-import-ownership-lookup'
-import { runScopedImportPipeline } from '@/gnr8/site/scoped-import-pipeline'
+import { runScopedImportPipeline, ScopedImportContinuationRequired } from '@/gnr8/site/scoped-import-pipeline'
 import { deterministicId } from '@/gnr8/runtime/deterministic'
 import { RENDERER_COMPATIBILITY_VERSION } from '@/gnr8/runtime/types'
 import { getArtifactById, preallocateSiteVersionIdentity } from '@/gnr8/runtime/runtime-store'
-import { importPublicSinglePageUrlToSnapshot } from '@/gnr8/validation/runtime/url-single-page-import'
+import { importPublicSinglePageUrlToSnapshot, UrlImportAssetContinuationRequired } from '@/gnr8/validation/runtime/url-single-page-import'
+import { UrlImportSeedCheckpoint } from '@/gnr8/site/url-import-seed-checkpoint'
+import { ASTRO_CANDIDATE_OBJECT_BUCKET_ENV } from '@/gnr8/output-adapters/astro-production-candidate-object-store'
 import { getSuperadminPool } from '@/src/superadmin/db'
 import { recordSingleSiteCaptureSpine, type SingleSiteCaptureSpineEvidenceRefInput } from '@/gnr8/single-site/single-site-capture-spine-adapter'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+export const maxDuration = 800
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -487,6 +491,7 @@ async function saveWorkingDomain(input:{workingDomain:string;ownershipSiteId:str
 }
 
 export async function POST(req: Request, ctx: { params: Promise<Params> }) {
+  let temporarySnapshotRoot: string | null = null
   try {
     const { clientId: rawClientId } = await ctx.params
     const clientId = normalizeUuid(rawClientId)
@@ -515,10 +520,11 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
 
     if(body.importAttemptId!==undefined&&!normalizeUuid(body.importAttemptId))
       return NextResponse.json({ok:false,error:'Invalid import attempt ID.'},{status:400})
+    const importAttemptId = body.importAttemptId ?? crypto.randomUUID()
     const runtimeIdentity = await resolveScopedImportRuntimeIdentity({
       sourceUrl: importUrl.toString(), clientId, agencyId: actionContext.agencyId,
       captureRevision: 'github-complete-capture-v1',
-      importAttemptId:body.importAttemptId??crypto.randomUUID(),
+      importAttemptId,
     })
     const proposedOwnershipSiteId = newScopedImportOwnershipSiteId({
       sourceUrl: importUrl.toString(), clientId, agencyId: actionContext.agencyId,
@@ -599,12 +605,36 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       reasonCode: preallocatedIdentity.reused ? 'preallocated_identity_exists' : 'preallocated_identity_created',
     })
 
-    const snapshot = await importPublicSinglePageUrlToSnapshot({
+    const checkpointBucket = process.env[ASTRO_CANDIDATE_OBJECT_BUCKET_ENV]
+    const checkpointClient = checkpointBucket ? getSupabaseServiceRoleClient() : null
+    if (!checkpointBucket || !checkpointClient) diagnostics.push('SITE_IMPORT_SEED_CHECKPOINT_UNCONFIGURED')
+    const checkpoint = checkpointClient && checkpointBucket
+      ? new UrlImportSeedCheckpoint(checkpointClient, checkpointBucket, {
+          agencyId: actionContext.agencyId, clientId,
+          siteVersionId: preallocatedIdentity.siteVersionId, importAttemptId,
+        }) : null
+    const restoredSnapshot = checkpoint ? await checkpoint.load(importUrl.toString()) : null
+    let checkpointReady = Boolean(restoredSnapshot)
+    const snapshot = restoredSnapshot ?? await importPublicSinglePageUrlToSnapshot({
       sourceUrl: importUrl.toString(),
       requestId: `client-site-import-${Date.now()}`,
       siteId: preallocatedIdentity.siteId,
       siteVersionId: preallocatedIdentity.siteVersionId,
     })
+    temporarySnapshotRoot = snapshot.snapshotRootDirAbs
+    if (restoredSnapshot) {
+      diagnostics.push('SITE_IMPORT_SEED_CHECKPOINT_RESTORED')
+    } else if (checkpoint && snapshot.importIntake?.ok) {
+      try {
+        await checkpoint.save(snapshot)
+        checkpointReady = true
+        diagnostics.push('SITE_IMPORT_SEED_CHECKPOINT_SAVED')
+      } catch (error) {
+        if (error instanceof Error && error.message === 'URL_IMPORT_CHECKPOINT_CONFLICT') throw error
+        // A cache failure must not turn a valid source capture into a failed import.
+        diagnostics.push('SITE_IMPORT_SEED_CHECKPOINT_UNAVAILABLE')
+      }
+    }
     const rawHtml = fs.readFileSync(snapshot.entryHtmlPathAbs, 'utf8')
     const documentTitle = extractTitleFromHtmlDocument(rawHtml)
     const siteNameResolution = resolveImportedSiteName({
@@ -704,6 +734,10 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       throw new Error('Import ownership changed after GitHub preflight.')
     }
 
+    console.info('[site-import] SCOPED_IMPORT_PIPELINE_STARTED', {
+      siteVersionId: preallocatedIdentity.siteVersionId,
+      multiPageEnabled: body.multiPageDiscovery != null,
+    })
     const imported = await runScopedImportPipeline({
       snapshot,
       sourceUrl: importUrl.toString(),
@@ -719,6 +753,19 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
         siteVersionId: preallocatedIdentity.siteVersionId,
       },
       multiPageDiscovery: body.multiPageDiscovery,
+      pageCheckpoint: checkpointReady && checkpoint && !restoredSnapshot ? {
+        loadHtmlPage: async () => null,
+        saveHtmlPage: (url, page) => checkpoint.saveHtmlPage(url, page),
+      } : checkpointReady ? checkpoint : null,
+      assetCheckpoint: checkpointReady && checkpoint && !restoredSnapshot ? {
+        loadAsset: async () => null,
+        hasAsset: async () => false,
+        saveAsset: (url, asset) => checkpoint.saveAsset(url, asset),
+      } : checkpointReady ? checkpoint : null,
+    })
+    console.info('[site-import] SCOPED_IMPORT_PIPELINE_COMPLETED', {
+      siteVersionId: imported.siteVersionId,
+      mode: imported.mode,
     })
 
     if (imported.siteId !== preallocatedIdentity.siteId || imported.siteVersionId !== preallocatedIdentity.siteVersionId) {
@@ -813,6 +860,19 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       },
     })
 
+    if (process.env.GNR8_NATIVE_STUDIO_RESOURCE_RESERVATION_ENABLED === '1') {
+      try {
+        await inngest.send({
+          name: 'gnr8/native-studio.resources.reserve.requested',
+          data: { scope: { agencyId: actionContext.agencyId, clientId,
+            siteId: ownershipSiteId }, actor: actionContext.userId },
+        })
+        diagnostics.push('NATIVE_STUDIO_RESOURCE_RESERVATION_QUEUED')
+      } catch {
+        diagnostics.push('NATIVE_STUDIO_RESOURCE_RESERVATION_QUEUE_FAILED')
+      }
+    }
+
     return NextResponse.json(
       {
         ok: true,
@@ -901,6 +961,14 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
       { status: 200 },
     )
   } catch (error) {
+    if (error instanceof ScopedImportContinuationRequired) {
+      return NextResponse.json({ ok: false, continue: true,
+        completedPages: error.completedPages, discoveredPages: error.discoveredPages }, { status: 202 })
+    }
+    if (error instanceof UrlImportAssetContinuationRequired) {
+      return NextResponse.json({ ok: false, continue: true,
+        completedAssets: error.completedAssets, discoveredAssets: error.discoveredAssets }, { status: 202 })
+    }
     console.error('[site-import] SITE_IMPORT_SITE_CREATE_FAILED', {
       message: error instanceof Error ? error.message : String(error),
     })
@@ -911,5 +979,7 @@ export async function POST(req: Request, ctx: { params: Promise<Params> }) {
 
     const message = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json({ ok: false, error: message, diagnostics: ['SITE_IMPORT_SITE_CREATE_FAILED'] }, { status: 500 })
+  } finally {
+    if (temporarySnapshotRoot) fs.rmSync(temporarySnapshotRoot, { recursive: true, force: true })
   }
 }

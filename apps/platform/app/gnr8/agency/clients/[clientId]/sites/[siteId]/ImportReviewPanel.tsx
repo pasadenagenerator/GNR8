@@ -14,8 +14,12 @@ function Review(p:Props){
  const [scopeConfirmed,setScopeConfirmed]=useState(false);
  const [functionsConfirmed,setFunctionsConfirmed]=useState(false);
  const [busy,setBusy]=useState(true),[notice,setNotice]=useState('');
+ const [monitorStudio,setMonitorStudio]=useState(false),[studioNotice,setStudioNotice]=useState('');
+ const [studioAttemptId,setStudioAttemptId]=useState<string|null>(null);
  const alive=useRef(false),sequence=useRef(0);
  const endpoint=`/api/gnr8/agency/clients/${p.clientId}/sites/${p.siteId}/standalone/import-review?agencyId=${encodeURIComponent(p.agencyId)}`;
+ const studioStatusQuery=new URLSearchParams({...p.selection,agencyId:p.agencyId}).toString();
+ const studioAttemptQuery=studioStatusQuery+(studioAttemptId?`&attemptId=${encodeURIComponent(studioAttemptId)}`:'');
  async function request(save=false){
   const call=++sequence.current;
   setBusy(true);setNotice('');
@@ -24,7 +28,8 @@ function Review(p:Props){
     body:JSON.stringify({...p.selection,token:model?.token,routes,brandConfirmed})}:{cache:'no-store'});
    const value=await response.json();
    if(!response.ok||!value.ok)throw Error(value.error??'Pregleda ni mogoče shraniti.');
-   if(alive.current&&call===sequence.current){setModel(value.data);setRoutes(value.data.routes);setBrandConfirmed(value.data.brand.confirmed);setScopeConfirmed(false);setFunctionsConfirmed(false);setNotice(save?'Pregled je shranjen za prikazani izvor. Objava ni sprožena.':'');}
+   if(alive.current&&call===sequence.current){setModel(value.data);setRoutes(value.data.routes);setBrandConfirmed(value.data.brand.confirmed);setScopeConfirmed(false);setFunctionsConfirmed(false);setNotice(save?'Pregled je shranjen za prikazani izvor. Objava ni sprožena.':'');
+    if(!value.data.confirmedAt){setMonitorStudio(false);setStudioNotice('');setStudioAttemptId(null);}}
   }catch(error){if(alive.current&&call===sequence.current)setNotice(error instanceof Error?error.message:'Pregled ni na voljo.');}
   finally{if(alive.current&&call===sequence.current)setBusy(false);}
  }
@@ -33,7 +38,20 @@ function Review(p:Props){
   try{
    const response=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...p.selection,action:'confirm',token:model?.token,scopeConfirmed,functionsConfirmed})});
    const value=await response.json();if(!response.ok||!value.ok)throw Error(value.error??'Potrditve ni mogoče shraniti.');
-   if(alive.current&&call===sequence.current){setModel(value.data);setFunctionsConfirmed(false);setNotice('Izbrani uvoz je potrjen. Objava ni sprožena.');}
+   if(alive.current&&call===sequence.current){setModel(value.data);setFunctionsConfirmed(false);
+    setStudioAttemptId(typeof value.sourceAttemptId==='string'?value.sourceAttemptId:null);
+    if(value.sourcePreparation==='queued'){
+     setStudioNotice('Priprava zasebnega paketa Studia poteka.');setMonitorStudio(true);
+    }else if(value.sourcePreparation==='queue-failed'||value.sourcePreparation==='unavailable'){
+     setMonitorStudio(false);setStudioNotice('');
+    }
+    setNotice(value.sourcePreparation==='queued'
+     ?'Izbrani uvoz je potrjen. Zasebna priprava Studia je zahtevana; objava ni sprožena.'
+     :value.sourcePreparation==='queue-failed'
+      ?'Izbrani uvoz je potrjen. Priprave Studia ni bilo mogoče sprožiti; uporabite gumb za ponovni poskus. Objava ni sprožena.'
+      :value.sourcePreparation==='unavailable'
+       ?'Izbrani uvoz je potrjen. Priprava Studia še ni nastavljena za to stran. Objava ni sprožena.'
+      :'Izbrani uvoz je potrjen. Objava ni sprožena.');}
   }catch(error){if(alive.current&&call===sequence.current)setNotice(error instanceof Error?error.message:'Potrditev ni na voljo.');}
   finally{if(alive.current&&call===sequence.current)setBusy(false);}
  }
@@ -45,7 +63,9 @@ function Review(p:Props){
     body:JSON.stringify({...p.selection,agencyId:p.agencyId,action:'prepare-source'})});
    const value=await response.json();
    if(!response.ok||!value.ok)throw Error('Priprave Studia ni mogoče začeti. Osvežite pregled.');
-   if(alive.current&&call===sequence.current)setNotice('Priprava zasebnega paketa Studia je zahtevana. Objava ni sprožena.');
+   if(alive.current&&call===sequence.current){setNotice('Priprava zasebnega paketa Studia je zahtevana. Objava ni sprožena.');
+    setStudioAttemptId(value.data.attemptId);
+    setStudioNotice('Priprava zasebnega paketa Studia poteka.');setMonitorStudio(true);}
   }catch(error){if(alive.current&&call===sequence.current)setNotice(error instanceof Error?error.message:'Priprava ni na voljo.');}
   finally{if(alive.current&&call===sequence.current)setBusy(false);}
  }
@@ -53,14 +73,14 @@ function Review(p:Props){
   const call=++sequence.current;setBusy(true);setNotice('');
   try{
    const endpoint=`/api/gnr8/agency/clients/${p.clientId}/sites/${p.siteId}/native-studio`;
-   const response=await fetch(endpoint+'?'+new URLSearchParams({...p.selection,agencyId:p.agencyId}),{cache:'no-store'});
+   const response=await fetch(endpoint+'?'+studioAttemptQuery,{cache:'no-store'});
    const value=await response.json();
    if(!response.ok||!value.ok)throw Error('Stanja priprave ni mogoče prebrati.');
-   if(alive.current&&call===sequence.current)setNotice(value.data.state==='prepared-source'
-    ?`Zasebni paket Studia je pripravljen: ${value.data.files} datotek. Objava ni sprožena.`
+   if(alive.current&&call===sequence.current){setMonitorStudio(value.data.state==='preparing-source');setStudioNotice(value.data.state==='prepared-source'
+    ?`Vir za Stacki je pripravljen: ${value.data.files} datotek. Studio še ni nameščen in objava ni sprožena.`
     :value.data.state==='failed-source'
      ?'Priprava paketa ni uspela. Pregled lahko osvežite in pripravo ponovno zahtevate.'
-     :'Priprava zasebnega paketa še poteka.');
+     :'Priprava zasebnega paketa še poteka.');}
   }catch(error){if(alive.current&&call===sequence.current)setNotice(error instanceof Error?error.message:'Stanje ni na voljo.');}
   finally{if(alive.current&&call===sequence.current)setBusy(false);}
  }
@@ -68,6 +88,35 @@ function Review(p:Props){
  // The parent remounts this component for every selection/scope change.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[]);
+ useEffect(()=>{
+  if(!monitorStudio)return;
+  const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined,failures=0;
+  async function poll(){
+   try{
+    const response=await fetch(`/api/gnr8/agency/clients/${p.clientId}/sites/${p.siteId}/native-studio?${studioAttemptQuery}`,
+     {cache:'no-store',signal:controller.signal});
+    const value=await response.json();
+    if(!response.ok||!value.ok)throw Error('status_unavailable');
+    if(controller.signal.aborted)return;
+    failures=0;
+    if(value.data.state==='prepared-source'){
+     setStudioNotice(`Vir za Stacki je pripravljen: ${value.data.files} datotek. Studio še ni nameščen in objava ni sprožena.`);
+     setMonitorStudio(false);
+    }else if(value.data.state==='failed-source'){
+     setStudioNotice('Priprava paketa ni uspela. Uporabite gumb za ponovni poskus.');
+     setMonitorStudio(false);
+    }else timer=setTimeout(()=>void poll(),5000);
+   }catch{
+    if(controller.signal.aborted)return;
+    if(++failures>=3){
+     setStudioNotice('Stanja priprave ni mogoče prebrati. Uporabite gumb za preverjanje.');
+     setMonitorStudio(false);
+    }else timer=setTimeout(()=>void poll(),5000);
+   }
+  }
+  timer=setTimeout(()=>void poll(),1500);
+  return()=>{controller.abort();if(timer)clearTimeout(timer);};
+ },[monitorStudio,p.clientId,p.siteId,studioAttemptQuery]);
  function decide(path:string,key:'contentConfirmed'|'layoutConfirmed',value:boolean){setRoutes(rows=>rows.map(r=>r.path===path?{...r,[key]:value}:r));}
  return <section aria-label="Pregled vsebine in postavitve" style={{borderTop:'1px solid #cbd5e1',paddingTop:16,overflowWrap:'anywhere'}}>
   <h3>Pregled vsebine, postavitve in znamke</h3>
@@ -95,7 +144,7 @@ function Review(p:Props){
    <p>Preostale ovire za nadaljnjo pripravo:</p><ul>{model.blockers.map(b=><li key={b}>{b}</li>)}</ul>
    <p>{model.savedAt?`Zadnje shranjevanje: ${model.savedAt}`:'Za ta izvor še ni shranjenega pregleda.'}</p>
    {model.confirmedAt&&<p>Izbrani obseg je potrjen od {model.confirmedAt}. To ne potrjuje celovitosti vseh strani izvirnega spletišča.</p>}
-   {model.confirmedAt&&model.nativeStudioAvailable&&<button disabled={busy||!p.canEdit} onClick={()=>void prepareStudio()}>Pripravi zasebni paket Studia</button>}
+   {model.confirmedAt&&model.nativeStudioAvailable&&<button disabled={busy||monitorStudio||!p.canEdit} onClick={()=>void prepareStudio()}>Pripravi zasebni paket Studia</button>}
    {model.confirmedAt&&model.nativeStudioAvailable&&<button disabled={busy} onClick={()=>void checkStudio()}>Preveri pripravo Studia</button>}
    <button disabled={busy||!p.canEdit} onClick={()=>void request(true)}>Shrani pregled</button>
    <label style={{display:'block',marginTop:12}}><input type="checkbox" checked={scopeConfirmed} disabled={busy||!p.canEdit} onChange={e=>setScopeConfirmed(e.target.checked)}/> Potrjujem, da seznam izbranih strani vključuje vse strani, ki jih želim uvoziti.</label>
@@ -104,5 +153,6 @@ function Review(p:Props){
   </>}
   <button disabled={busy} onClick={()=>void request()}>Ponovno naloži shranjeni pregled</button>
   <p role="status">{busy?'Nalagam oziroma shranjujem pregled …':notice}</p>
+  {studioNotice&&<p role="status" aria-live="polite">{studioNotice}</p>}
  </section>;
 }
