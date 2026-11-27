@@ -1497,6 +1497,7 @@ async function acquireScopedMultiPageHtml(input: {
   assetCheckpoint?: Pick<UrlImportSeedCheckpoint, 'loadAsset' | 'saveAsset'> &
     Partial<Pick<UrlImportSeedCheckpoint, 'hasAsset'>> | null
   pageBatchSize?: number
+  requireCompleteCapture?: boolean
 }): Promise<{ summary: MultiPageHtmlAcquisitionSummary; manifest: MultiPageHtmlAcquisitionManifest | null }> {
   if (!input.option.acquireHtml) return { summary: disabledHtmlAcquisitionSummary(), manifest: null }
 
@@ -1899,6 +1900,20 @@ async function acquireScopedMultiPageHtml(input: {
     candidateCount: candidates.length,
     fetchedPageCount: fetchedAssetPages.length,
   })
+  if (input.requireCompleteCapture) {
+    const failedPages = failedRequiredCapturePages(pages, input.discovery.manifest)
+    if (failedPages.length > 0) {
+      console.error('[scoped-import] GITHUB_IMPORT_INCOMPLETE_PAGES', {
+        count: failedPages.length,
+        pages: failedPages.slice(0, 20).map((page) => ({
+          route: page.normalizedRoutePath,
+          status: page.httpStatusCode,
+          reason: page.failureReason ?? page.skippedReason,
+        })),
+      })
+      throw new Error('GITHUB_IMPORT_INCOMPLETE_CAPTURE:page_failed_or_limited')
+    }
+  }
   const childAssetCapture = fetchedAssetPages.length > 0
     ? await captureAssetsForAdditionalHtmlPages({
         pages: fetchedAssetPages,
@@ -2691,6 +2706,7 @@ async function buildScopedMultiPageDiscovery(input: {
     pageCheckpoint: input.pageCheckpoint,
     assetCheckpoint: input.assetCheckpoint,
     pageBatchSize: input.pageBatchSize,
+    requireCompleteCapture: input.requireCompleteCapture,
   })
   discoveryResult.summary.discoveredPageCount = manifest.discoveredPages.length
   discoveryResult.summary.routeCandidateCount = manifest.routeCandidates.length
@@ -2766,6 +2782,26 @@ async function buildScopedMultiPageDiscovery(input: {
   }
 }
 
+function failedRequiredCapturePages(
+  pages: MultiPageHtmlAcquisitionPageEntry[],
+  manifest: MultiPageDiscoveryManifest | null,
+): MultiPageHtmlAcquisitionPageEntry[] {
+  const sitemapOnlyRoutes = new Set(manifest?.routePriorityBalancing?.assignments
+    ?.filter((assignment) => assignment.selected && assignment.source === 'sitemap')
+    .map((assignment) => assignment.routePath) ?? [])
+  return pages.filter((page) => {
+    if (page.status === 'skipped') {
+      return ['acquisition_page_limit', 'max_bytes_per_page_exceeded'].includes(page.skippedReason ?? '')
+    }
+    if (page.status !== 'failed') return false
+    // A sitemap may retain deleted pages; their 404/410 remains provenance,
+    // while a linked required page must still block a complete archive.
+    return !(page.failureReason === 'non_2xx_status' &&
+      [404, 410].includes(page.httpStatusCode ?? 0) &&
+      sitemapOnlyRoutes.has(page.normalizedRoutePath ?? ''))
+  })
+}
+
 function gitCaptureIncompleteReasons(
   snapshot: Pick<UrlSinglePageImportSnapshot, 'fetchManifest'>,
   discovery: Awaited<ReturnType<typeof buildScopedMultiPageDiscovery>>,
@@ -2774,20 +2810,8 @@ function gitCaptureIncompleteReasons(
   const provenUnusedCssDependencies = new Set((acquisition?.diagnostics ?? [])
     .filter((code) => code.startsWith('MULTIPAGE_UNUSED_CSS_DEPENDENCY_SKIPPED:'))
     .map((code) => code.slice('MULTIPAGE_UNUSED_CSS_DEPENDENCY_SKIPPED:'.length)))
-  const sitemapOnlyRoutes = new Set(discovery.manifest?.routePriorityBalancing?.assignments
-    .filter((assignment) => assignment.selected && assignment.source === 'sitemap')
-    .map((assignment) => assignment.routePath) ?? [])
-  const failedRequiredPage = acquisition?.pages.some((page) => {
-    if (page.status === 'skipped') {
-      return ['acquisition_page_limit', 'max_bytes_per_page_exceeded'].includes(page.skippedReason ?? '')
-    }
-    if (page.status !== 'failed') return false
-    // A sitemap can retain deleted URLs. Keep the 404 in provenance, but do not
-    // require a page that the source site no longer serves.
-    return !(page.failureReason === 'non_2xx_status' &&
-      [404, 410].includes(page.httpStatusCode ?? 0) &&
-      sitemapOnlyRoutes.has(page.normalizedRoutePath ?? ''))
-  })
+  const failedRequiredPage = acquisition &&
+    failedRequiredCapturePages(acquisition.pages, discovery.manifest ?? null).length > 0
   return [
     ...(!acquisition && discovery.summary.enabled ? ['html_acquisition_missing'] : []),
     ...(failedRequiredPage ? ['page_failed_or_limited'] : []),
