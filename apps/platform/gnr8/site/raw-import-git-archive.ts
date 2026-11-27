@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {pushStandaloneGit,readStandaloneGit} from '../standalone/publication-git';
+import {pushStandaloneGit,readStandaloneGit,RAW_IMPORT_GIT_MAX_BYTES} from '../standalone/publication-git';
 
 type Scope={agencyId:string;clientId:string;siteId:string};
 type File={path:string;mediaType:string;sizeBytes:number;sha256:string;bytes:Buffer};
@@ -27,7 +27,7 @@ export function rawImportGitPackage(input:{scope:Scope;runtimeSiteId:string;site
   if(!Buffer.isBuffer(file.bytes)||file.bytes.length!==file.sizeBytes)invalid('file_size_mismatch');
   if(hash(file.bytes)!==file.sha256)invalid('file_hash_mismatch');
   if(!/^[a-z0-9.+-]+\/[a-z0-9.+-]+(?:; charset=utf-8)?$/i.test(file.mediaType))invalid('media_type');
-  seen.add(key);total+=file.bytes.length;if(total>128*1024*1024)invalid('total_bytes_limit');
+  seen.add(key);total+=file.bytes.length;if(total>RAW_IMPORT_GIT_MAX_BYTES)invalid('total_bytes_limit');
   return {path,mediaType:file.mediaType,bytes:file.sizeBytes,sha256:file.sha256};
  }).sort((a,b)=>a.path.localeCompare(b.path));
  const manifest:Archive={format:'gnr8-raw-import-git:v1',scope:input.scope,runtimeSiteId:input.runtimeSiteId,
@@ -52,9 +52,11 @@ export async function writeRawImportGitArchive(input:{scope:Scope;runtimeSiteId:
  if(existingCommit!==undefined&&!/^[a-f0-9]{40}$/.test(existingCommit))invalid('existing_commit');
  const commit=existingCommit??(await (deps.push??pushStandaloneGit)({owner:input.target.owner,repository:input.target.repository,
   defaultBranch,parent,ref:`heads/${branch}`,manifestSha256,files:gitFiles,token:input.target.token,
-  author:{name:'GNR8 Import',email:'import@gnr8.invalid'}})).commit;
+  author:{name:'GNR8 Import',email:'import@gnr8.invalid'}},fetch,
+  {maxBytes:RAW_IMPORT_GIT_MAX_BYTES,timeoutMs:300_000})).commit;
  const read=await (deps.read??readStandaloneGit)({owner:input.target.owner,repository:input.target.repository,
-  branch,commit,token:input.target.token});
+  branch,commit,token:input.target.token},fetch,
+  {maxBytes:RAW_IMPORT_GIT_MAX_BYTES,timeoutMs:180_000});
  if(read.commit!==commit||read.parent!==parent||read.parentCount!==1||
    read.files.size!==gitFiles.length||[...read.files.keys()].some(path=>!gitFiles.some(f=>f.path===path)))invalid('readback_structure');
  for(const file of gitFiles)if(!read.files.get(file.path)?.equals(file.body))invalid('readback_content');

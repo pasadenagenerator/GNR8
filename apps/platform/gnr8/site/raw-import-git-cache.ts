@@ -4,7 +4,7 @@ import type {SupabaseClient} from '@supabase/supabase-js';
 import {getSupabaseServiceRoleClient} from '@/src/supabase/service-role-server';
 import {ASTRO_CANDIDATE_OBJECT_BUCKET_ENV} from '../output-adapters/astro-production-candidate-object-store';
 import type {RawImportedSiteArtifactMetadata} from '../runtime/types';
-import {readStandaloneGit} from '../standalone/publication-git';
+import {readStandaloneGit,RAW_IMPORT_GIT_MAX_BYTES} from '../standalone/publication-git';
 import {resolvedGitHubTarget} from '../stacki/stacki-github-config';
 import {GitHubStackiStore} from '../stacki/stacki-github-store';
 
@@ -63,7 +63,8 @@ export class RawImportGitCache{
       if(!target||`${target.owner}/${target.repository}`!==ref.repository)invalid();
       await this.git.verifyTarget(scope,target);
       const archive=await this.git.read({owner:target.owner,repository:target.repository,
-        branch:`imports/${versionId}`,commit:ref.commit,token:target.token});
+        branch:`imports/${versionId}`,commit:ref.commit,token:target.token},fetch,
+        {maxBytes:RAW_IMPORT_GIT_MAX_BYTES,timeoutMs:180_000});
       if(archive.commit!==ref.commit||archive.parentCount!==1||!archive.parent)invalid();
       const manifestBody=archive.files.get(ref.manifestPath);
       if(!manifestBody||hash(manifestBody)!==ref.manifestSha256)invalid();
