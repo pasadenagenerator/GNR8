@@ -27,6 +27,7 @@ type FailureObserver=(failure:RetainedAssetReadFailure)=>void;
 /** Request-local immutable metadata cache. Never share across actors or requests. */
 export function createVerifiedRetainedAssetReader(client: SupabaseClient, batchFiles = false, batchPaths?: string[],onFailure?:FailureObserver,
   cache?:Pick<RawImportGitCache,'read'>) {
+  const requestCache = cache ?? new RawImportGitCache();
   const artifacts = new Map<string, ReturnType<typeof readArtifact>>();
   const manifests = new Map<string, ReturnType<typeof readManifest>>();
   const fileBatches = new Map<string, Promise<{ data: any[] | null; error: unknown; status?:number }>>();
@@ -89,7 +90,7 @@ export function createVerifiedRetainedAssetReader(client: SupabaseClient, batchF
       if (!manifests.has(id)) manifests.set(id, readManifest(id));
       return manifests.get(id)!;
     },
-  },onFailure,cache);
+  },onFailure,requestCache);
 }
 
 /** Caller must establish either authenticated ownership or an active public artifact binding. */
