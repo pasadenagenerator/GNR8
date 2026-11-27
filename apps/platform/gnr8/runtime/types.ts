@@ -541,6 +541,7 @@ export type RawImportedSiteArtifactMetadata = {
     commit: string;
     manifestPath: string;
     manifestSha256: string;
+    archiveFormat?: 'sharded-v1';
   };
   multiPage?: {
     enabled: boolean;

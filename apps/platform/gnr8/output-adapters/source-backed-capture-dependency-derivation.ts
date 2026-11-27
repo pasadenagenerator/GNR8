@@ -537,7 +537,8 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
             siteVersionId:derivedSiteVersionId,files:derivedFiles,target},
           {repository:()=>store.rawImportRepository(derivedSiteVersionId)});
           return {scope,repository:archive.repository,commit:archive.commit,
-            manifestPath:archive.manifestPath,manifestSha256:archive.manifestSha256};
+            manifestPath:archive.manifestPath,manifestSha256:archive.manifestSha256,
+            ...(archive.archiveFormat ? {archiveFormat:archive.archiveFormat} : {})};
         })()
       : undefined;
     const createdVersion = existingVersion

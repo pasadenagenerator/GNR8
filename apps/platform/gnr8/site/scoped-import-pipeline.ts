@@ -4129,6 +4129,7 @@ export async function runScopedImportPipeline(input: {
       scope: input.ownershipScope,
       repository: rawGitArchive.repository, commit: rawGitArchive.commit,
       manifestPath: rawGitArchive.manifestPath, manifestSha256: rawGitArchive.manifestSha256,
+      ...(rawGitArchive.archiveFormat ? { archiveFormat: rawGitArchive.archiveFormat } : {}),
     } : null
 
     const migrated = await deps.createSiteVersionFromMigration({

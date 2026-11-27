@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {pushStandaloneGit,readStandaloneGit,RAW_IMPORT_GIT_MAX_BYTES} from '../standalone/publication-git';
+import {writeShardedRawImportArchive} from './raw-import-sharded-git';
 
 type Scope={agencyId:string;clientId:string;siteId:string};
 type File={path:string;mediaType:string;sizeBytes:number;sha256:string;bytes:Buffer};
@@ -44,12 +45,16 @@ export async function writeRawImportGitArchive(input:{scope:Scope;runtimeSiteId:
  files:File[];target:Target},deps:{
  repository:()=>Promise<{defaultBranch:string;parent:string;existingCommit?:string}>;
  push?:typeof pushStandaloneGit;read?:typeof readStandaloneGit;
-}):Promise<{repository:string;commit:string;manifestPath:string;manifestSha256:string;files:Archive['files']}>{
+}):Promise<{repository:string;commit:string;manifestPath:string;manifestSha256:string;
+ files:Archive['files'];archiveFormat?:'sharded-v1'}>{
  const {manifest,prefix,gitFiles,manifestSha256}=rawImportGitPackage(input);
  const {defaultBranch,parent,existingCommit}=await deps.repository();
  if(!/^[a-zA-Z0-9._/-]{1,100}$/.test(defaultBranch)||!/^[a-f0-9]{40}$/.test(parent))invalid('repository_parent');
  const branch=`imports/${input.siteVersionId}`;
  if(existingCommit!==undefined&&!/^[a-f0-9]{40}$/.test(existingCommit))invalid('existing_commit');
+ if (manifest.files.reduce((sum,file)=>sum+file.bytes,0)>64*1024*1024) {
+  return writeShardedRawImportArchive({...input,parent,existingCommit});
+ }
  const commit=existingCommit??(await (deps.push??pushStandaloneGit)({owner:input.target.owner,repository:input.target.repository,
   defaultBranch,parent,ref:`heads/${branch}`,manifestSha256,files:gitFiles,token:input.target.token,
   author:{name:'GNR8 Import',email:'import@gnr8.invalid'}},fetch,
