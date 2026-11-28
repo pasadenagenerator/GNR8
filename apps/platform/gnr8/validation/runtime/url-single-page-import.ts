@@ -2949,12 +2949,11 @@ export async function captureAssetsForAdditionalHtmlPages(input: {
   const selectorEvidence = input.fullHtmlDocumentsForCssUsage
     ? collectHtmlSelectorEvidence(input.fullHtmlDocumentsForCssUsage) : undefined;
   const markProvablyUnused = (css: string, stylesheetUrl: string): void => {
-    if (!input.fullHtmlDocumentsForCssUsage) return;
+    if (!selectorEvidence) return;
     try {
       const unused = findProvablyUnusedCssDependencies({
         css,
         stylesheetUrl,
-        htmlDocuments: input.fullHtmlDocumentsForCssUsage,
         selectorEvidence,
       });
       const unusedIdentities = new Set(unused.map((dependency) => canonicalAdditionalPageAssetIdentity(dependency.resolvedUrl)));
