@@ -16,6 +16,7 @@ import { parse, parseFragment, serialize, serializeOuter } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
 
 import type { CanonicalSiteVersionSnapshot, RawImportedSiteArtifact, RuntimeArtifact } from "@/gnr8/runtime/types";
+import { boundedParallelMap } from "@/gnr8/runtime/bounded-parallel-map";
 import { computeLocalPathCandidate } from "@/gnr8/validation/runtime/url-single-page-import";
 import {
   normalizeRawTemplateRouteMapPath,
@@ -31,7 +32,8 @@ import { createGeneratedOutputContentManifest, type GeneratedOutputContentManife
 import { encodeGeneratedOutputRoutePath, isExplicitExternalNavigationUrl } from "./generated-output-route-path";
 import { createAstroStaticSiteProjectManifest, type NormalizedStaticBusinessSiteContent, type NormalizedStaticSitePage } from "./astro-static-site-adapter";
 import type { OutputAdapterCapability } from "./output-adapter-selection";
-import { removeProvablyUnusedCssDependencyRules } from "./source-backed-css-dependency-analysis";
+import { collectHtmlSelectorEvidence, removeProvablyUnusedCssDependencyRules,
+  type HtmlSelectorEvidence } from "./source-backed-css-dependency-analysis";
 
 type HtmlNode = DefaultTreeAdapterMap["node"];
 type HtmlElement = DefaultTreeAdapterMap["element"];
@@ -101,9 +103,7 @@ export async function loadSourceBackedAstroHtmlByPath(input: {
       normalizeAstroOutputRoutePath(route.routePath),
     ),
   ]);
-  const htmlByPath: Record<string, string> = {};
-
-  for (const path of [...routePaths].sort((left, right) => left.localeCompare(right))) {
+  const pages = await boundedParallelMap([...routePaths].sort((left, right) => left.localeCompare(right)), 16, async (path) => {
     const routeSource = resolveRawTemplateRouteMapFile({
       siteVersionId: input.siteVersion.id,
       requestedPath: path,
@@ -134,8 +134,9 @@ export async function loadSourceBackedAstroHtmlByPath(input: {
     if (!expected || expected.sha256 !== asset.sha256 || expected.sizeBytes !== asset.sizeBytes) {
       throw new SourceBackedAstroUnsupportedError([`source_route_asset_identity_mismatch:${path}`]);
     }
-    htmlByPath[path] = asset.bytes.toString("utf8");
-  }
+    return [path, asset.bytes.toString("utf8")] as const;
+  });
+  const htmlByPath: Record<string, string> = Object.fromEntries(pages);
 
   if (!htmlByPath["/"]) throw new SourceBackedAstroUnsupportedError(["missing_root_route"]);
   return htmlByPath as Record<string, string> & { "/": string };
@@ -152,9 +153,10 @@ export async function loadSourceBackedAstroGenerationSource(input: Parameters<ty
     sha256: string;
     bytes: Buffer;
   }>();
-  for (const file of Object.values(input.rawArtifact.fileMap)
+  const stylesheetFiles = Object.values(input.rawArtifact.fileMap)
     .filter((entry) => /(?:^text\/css\b|\.css$)/i.test(`${entry.mediaType} ${entry.path}`))
-    .sort((left, right) => left.path.localeCompare(right.path))) {
+    .sort((left, right) => left.path.localeCompare(right.path));
+  const stylesheets = await boundedParallelMap(stylesheetFiles, 16, async (file) => {
     const asset = await input.getRawAsset({
       siteVersionId: input.siteVersion.id,
       artifactId: input.rawArtifact.id,
@@ -169,6 +171,9 @@ export async function loadSourceBackedAstroGenerationSource(input: Parameters<ty
     if (file.sha256 !== asset.sha256 || file.sizeBytes !== asset.sizeBytes) {
       throw new SourceBackedAstroUnsupportedError([`source_stylesheet_asset_identity_mismatch:${file.path}`]);
     }
+    return {file,asset};
+  });
+  for (const {file,asset} of stylesheets) {
     stylesheetCssByPath[file.path] = asset.bytes.toString("utf8");
     retainedByPath.set(file.path, {
       mediaType: asset.mediaType,
@@ -188,6 +193,7 @@ export async function loadSourceBackedAstroGenerationSource(input: Parameters<ty
     unusedCssDependenciesByPath.set(dependency.stylesheetPath, urls);
   }
   const htmlDocuments = Object.values(htmlByPath);
+  let selectorEvidence: HtmlSelectorEvidence | null = null;
   const materializedByPath = new Map([...retainedByPath].map(([filePath, asset]) => {
     let css = asset.bytes.toString("utf8");
     const allowedUnusedUrls = unusedCssDependenciesByPath.get(filePath) ?? new Set<string>();
@@ -196,10 +202,11 @@ export async function loadSourceBackedAstroGenerationSource(input: Parameters<ty
       if (!stylesheetUrl) {
         throw new SourceBackedAstroUnsupportedError([`source_stylesheet_unused_dependency_source_missing:${filePath}`]);
       }
+      selectorEvidence ??= collectHtmlSelectorEvidence(htmlDocuments);
       const pruned = removeProvablyUnusedCssDependencyRules({
         css,
         stylesheetUrl,
-        htmlDocuments,
+        selectorEvidence,
         allowedUnusedUrls,
       });
       if (pruned.removedUrls.length !== allowedUnusedUrls.size) {

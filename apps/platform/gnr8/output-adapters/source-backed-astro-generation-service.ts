@@ -47,6 +47,7 @@ import {
 } from "./astro-production-candidate-supabase-gateway";
 import { SupabaseAstroCandidateObjectStore } from "./astro-production-candidate-object-store";
 import {githubArchiveRequired} from '../stacki/stacki-github-config';
+import { RawImportGitCache } from '../site/raw-import-git-cache';
 import {
   createSourceBackedAstroCandidateProducer,
   SOURCE_BACKED_ASTRO_PRODUCER_KIND,
@@ -134,6 +135,7 @@ export async function runSourceBackedAstroGeneration(
       (sourceVersion.importProvenanceSummary as Record<string, unknown>)?.brandStyleGuide, brandReference) : undefined;
 
     const identities = deriveIdentities(payload.actionId);
+    const rawAssetCache = new RawImportGitCache();
     const dependencyCapture = await ensureDependencyCompleteDerivedCapture({
       parentSiteVersion: sourceVersion,
       parentArtifact: sourceArtifact,
@@ -143,6 +145,7 @@ export async function runSourceBackedAstroGeneration(
       actor: payload.actor,
       acceptedFunctionalReductions: payload.acceptedFunctionalReductions,
       retainedFunctions:payload.retainedFunctions,
+      rawAssetCache,
     });
     sourceVersion = dependencyCapture.siteVersion;
     sourceArtifact = dependencyCapture.artifact;
@@ -151,7 +154,7 @@ export async function runSourceBackedAstroGeneration(
     const sourceGenerationSource = await loadSourceBackedAstroGenerationSource({
       siteVersion: sourceVersion,
       rawArtifact,
-      getRawAsset: getRawTemplateSiteAsset,
+      getRawAsset: (input) => getRawTemplateSiteAsset({...input, cache: rawAssetCache}),
     });
     const generationInput = createSourceBackedAstroGenerationInput({
       siteVersion: sourceVersion,

@@ -17,6 +17,8 @@ test("records and removes only asset rules whose selectors cannot match retained
   ].join("");
   const htmlDocuments = ['<!doctype html><html><body><section class="hero">Hero</section></body></html>'];
   const unused = findProvablyUnusedCssDependencies({ css, stylesheetUrl: STYLESHEET_URL, htmlDocuments });
+  const selectorEvidence = collectHtmlSelectorEvidence(htmlDocuments);
+  assert.deepEqual(findProvablyUnusedCssDependencies({css,stylesheetUrl:STYLESHEET_URL,selectorEvidence}),unused);
 
   assert.deepEqual(unused, [{
     resolvedUrl: "https://cdn.example.test/site/css/images/layers.png",
@@ -29,6 +31,8 @@ test("records and removes only asset rules whose selectors cannot match retained
     htmlDocuments,
     allowedUnusedUrls: new Set(unused.map((entry) => entry.resolvedUrl)),
   });
+  assert.deepEqual(removeProvablyUnusedCssDependencyRules({css,stylesheetUrl:STYLESHEET_URL,
+    selectorEvidence,allowedUnusedUrls:new Set(unused.map(entry=>entry.resolvedUrl))}),pruned);
   assert.deepEqual(pruned.removedUrls, ["https://cdn.example.test/site/css/images/layers.png"]);
   assert.doesNotMatch(pruned.css, /leaflet-control-layers|layers\.png/);
   assert.match(pruned.css, /\.hero\{background-image:url\('\.\/images\/hero\.webp'\)\}/);
