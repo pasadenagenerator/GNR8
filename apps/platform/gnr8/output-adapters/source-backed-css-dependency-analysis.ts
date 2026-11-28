@@ -1,7 +1,7 @@
 import postcss from "postcss";
 import { parse } from "parse5";
 
-type HtmlSelectorEvidence = {
+export type HtmlSelectorEvidence = {
   classNames: ReadonlySet<string>;
   ids: ReadonlySet<string>;
 };
@@ -11,12 +11,15 @@ export type UnusedCssDependencyEvidence = {
   selectors: string[];
 };
 
-export function findProvablyUnusedCssDependencies(input: {
+type SelectorEvidenceInput =
+  | { htmlDocuments: string[]; selectorEvidence?: never }
+  | { selectorEvidence: HtmlSelectorEvidence; htmlDocuments?: never };
+
+export function findProvablyUnusedCssDependencies(input: SelectorEvidenceInput & {
   css: string;
   stylesheetUrl: string;
-  htmlDocuments: string[];
 }): UnusedCssDependencyEvidence[] {
-  const evidence = collectHtmlSelectorEvidence(input.htmlDocuments);
+  const evidence = input.selectorEvidence ?? collectHtmlSelectorEvidence(input.htmlDocuments ?? []);
   const references = new Map<string, { required: boolean; selectors: Set<string> }>();
   const root = postcss.parse(input.css, { from: input.stylesheetUrl });
 
@@ -43,14 +46,13 @@ export function findProvablyUnusedCssDependencies(input: {
     .sort((left, right) => left.resolvedUrl.localeCompare(right.resolvedUrl));
 }
 
-export function removeProvablyUnusedCssDependencyRules(input: {
+export function removeProvablyUnusedCssDependencyRules(input: SelectorEvidenceInput & {
   css: string;
   stylesheetUrl: string;
-  htmlDocuments: string[];
   allowedUnusedUrls: ReadonlySet<string>;
 }): { css: string; removedUrls: string[] } {
   if (input.allowedUnusedUrls.size === 0) return { css: input.css, removedUrls: [] };
-  const evidence = collectHtmlSelectorEvidence(input.htmlDocuments);
+  const evidence = input.selectorEvidence ?? collectHtmlSelectorEvidence(input.htmlDocuments ?? []);
   const root = postcss.parse(input.css, { from: input.stylesheetUrl });
   const removedUrls = new Set<string>();
 
@@ -74,7 +76,7 @@ export function removeProvablyUnusedCssDependencyRules(input: {
   };
 }
 
-function collectHtmlSelectorEvidence(htmlDocuments: string[]): HtmlSelectorEvidence {
+export function collectHtmlSelectorEvidence(htmlDocuments: string[]): HtmlSelectorEvidence {
   const classNames = new Set<string>();
   const ids = new Set<string>();
   const visit = (node: unknown): void => {

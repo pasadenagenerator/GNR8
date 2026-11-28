@@ -30,10 +30,12 @@ import {
 } from "@/gnr8/validation/runtime/url-single-page-import";
 
 import type { AcceptedSourceFunctionalReductions } from "./source-backed-astro-input";
-import { findProvablyUnusedCssDependencies } from "./source-backed-css-dependency-analysis";
+import { collectHtmlSelectorEvidence, findProvablyUnusedCssDependencies,
+  type HtmlSelectorEvidence } from "./source-backed-css-dependency-analysis";
 import { writeRawImportGitArchive } from '../site/raw-import-git-archive';
 import { writeGeneratedArtifactGitArchive } from '../site/generated-artifact-git-archive';
 import { GeneratedArtifactGitCache } from '../site/generated-artifact-git-cache';
+import type { RawImportGitCache } from '../site/raw-import-git-cache';
 
 export type DerivedCaptureResult = {
   siteVersion: CanonicalSiteVersionSnapshot;
@@ -149,6 +151,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
   actor: string;
   acceptedFunctionalReductions?: AcceptedSourceFunctionalReductions;
   retainedFunctions?: import('@gnr8/runtime-contracts').RetainedFunctions;
+  rawAssetCache?: Pick<RawImportGitCache, 'read'>;
   /** Internal operator acquisition boundary. The normal importer still checks
    * responses and closes the graph; this is not exposed in action payloads.
    */
@@ -196,6 +199,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
   const persistedParentFiles = await persistence.getRawTemplateSiteArtifactFiles({
     siteVersionId: parentSiteVersion.id,
     artifactId: parentRawArtifact.id,
+    cache: input.rawAssetCache,
   });
   const inheritedCaptureRewrites = parentSiteVersion.importProvenanceSummary?.derivedCapture?.rewrites ?? [];
   assertPersistedCaptureDependencyEvidence({
@@ -265,6 +269,7 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
     filePaths: new Set(parentFiles.map((file) => file.path)),
   });
   const inheritedUnusedCssDependencies = parentSiteVersion.importProvenanceSummary?.derivedCapture?.unusedCssDependencies ?? [];
+  let selectorEvidence: HtmlSelectorEvidence | null = null;
   const unusedCssDependencies = [
     ...inheritedUnusedCssDependencies,
     ...retainedStylesheetRewrites
@@ -273,10 +278,11 @@ export async function ensureDependencyCompleteDerivedCapture(input: {
       const stylesheetPath = stylesheet.to.replace(/^\/+/, "");
       const file = parentFiles.find((candidate) => candidate.path === stylesheetPath);
       if (!file) return [];
+      selectorEvidence ??= collectHtmlSelectorEvidence(htmlFiles.map((htmlFile) => htmlFile.bytes.toString("utf8")));
       return findProvablyUnusedCssDependencies({
         css: file.bytes.toString("utf8"),
         stylesheetUrl: stylesheet.from,
-        htmlDocuments: htmlFiles.map((htmlFile) => htmlFile.bytes.toString("utf8")),
+        selectorEvidence,
       }).map((dependency) => ({ stylesheetPath, ...dependency }));
     }),
   ].filter((entry, index, all) => all.findIndex((candidate) =>

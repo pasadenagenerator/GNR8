@@ -1,4 +1,5 @@
 import { verifiedRawFileRow } from './verified-raw-file-row';
+import { boundedParallelMap } from './bounded-parallel-map';
 import { RawImportGitCache } from '../site/raw-import-git-cache';
 import {GeneratedArtifactGitCache,generatedArtifactReferenceColumns,type GeneratedGitRef} from '../site/generated-artifact-git-cache';
 import { readPublicPreparation } from '@/gnr8/output-adapters/astro-public-preparation-contract';
@@ -4544,6 +4545,7 @@ export async function getRawTemplateSiteAsset(input: {
   filePath: string;
   artifactId?: string | null;
   dbClient?: RuntimeStoreDbClient;
+  cache?: Pick<RawImportGitCache, 'read'>;
 }): Promise<{ mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer } | null> {
   const normalizedFilePath = normalizeRawTemplateFilePath(input.filePath);
   if (!normalizedFilePath) return null;
@@ -4611,13 +4613,14 @@ export async function getRawTemplateSiteAsset(input: {
       mediaType: hit.media_type,
       sizeBytes: Number(hit.file_size_bytes) || 0,
     });
-    return verifiedRawArtifactFile(hit, input.siteVersionId);
+    return verifiedRawArtifactFile(hit, input.siteVersionId, input.cache);
 }
 
 export async function getRawTemplateSiteArtifactFiles(input: {
   siteVersionId: string;
   artifactId: string;
   dbClient?: RuntimeStoreDbClient;
+  cache?: Pick<RawImportGitCache, 'read'>;
 }): Promise<Array<{ path: string; mediaType: string; sizeBytes: number; sha256: string; bytes: Buffer }>> {
   const rows = await withRuntimeClient({ dbClient: input.dbClient }, async (client) => {
     const result = await client.query<RawTemplateArtifactFileRow & { file_path: string }>(
@@ -4639,10 +4642,11 @@ export async function getRawTemplateSiteArtifactFiles(input: {
     );
     return result.rows;
   });
-  const cache = new RawImportGitCache();
-  const out = [];
-  for (const row of rows) out.push({path: row.file_path, ...await verifiedRawArtifactFile(row, input.siteVersionId, cache)});
-  return out;
+  const cache = input.cache ?? new RawImportGitCache();
+  return boundedParallelMap(rows, 16, async (row) => ({
+    path: row.file_path,
+    ...await verifiedRawArtifactFile(row, input.siteVersionId, cache),
+  }));
 }
 
 export async function persistRawImportedSiteArtifact(input: {
