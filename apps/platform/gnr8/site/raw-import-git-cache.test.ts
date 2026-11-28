@@ -13,7 +13,7 @@ const ref={scope:{agencyId:'11111111-1111-4111-8111-111111111111',
   repository:'owner/site',commit:'a'.repeat(40),
   manifestPath:`raw-import/${versionId}/.gnr8-import-manifest.json`,manifestSha256:'b'.repeat(64)};
 
-test('private raw import cache verifies bytes; corruption and public bucket fail closed',async()=>{
+test('private raw import cache repairs corrupted bytes; public bucket fails closed',async()=>{
   const objects=new Map<string,Buffer>();let publicBucket=false;
   const client={storage:{
     getBucket:async()=>({data:{public:publicBucket},error:null}),
@@ -33,7 +33,8 @@ test('private raw import cache verifies bytes; corruption and public bucket fail
   assert.deepEqual(await verified.read(pinned,versionId,file),body);
   const key=[...objects.keys()][0];
   objects.set(key,Buffer.from('corrupt'));
-  await assert.rejects(verified.read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
+  assert.deepEqual(await verified.read(pinned,versionId,file),body);
+  assert.deepEqual(objects.get(key),body);
   publicBucket=true;
   await assert.rejects(new RawImportGitCache(client as never,'private-assets',git as never).read(pinned,versionId,file),
     /RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
@@ -60,13 +61,15 @@ test('missing raw derivative restores exact pinned Git bytes and rejects wrong s
   assert.equal(reads,1);
   const key=[...objects.keys()][0]!;
   objects.set(key,Buffer.from('corrupt'));
-  await assert.rejects(cache.read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
+  assert.deepEqual(await cache.read(pinned,versionId,file),body);
+  assert.deepEqual(objects.get(key),body);
   assert.equal(reads,1);
   objects.delete(key);repo='other';
   await assert.rejects(new RawImportGitCache(client as never,'private-assets',git as never)
     .read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
   assert.equal(reads,1);
   repo='site';files.set(`raw-import/${versionId}/${file.path}`,Buffer.from('changed'));
+  objects.set(key,Buffer.from('corrupt'));
   await assert.rejects(new RawImportGitCache(client as never,'private-assets',git as never)
     .read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
   files.set(`raw-import/${versionId}/${file.path}`,Buffer.from(body));uploadBlocked=true;
@@ -96,4 +99,48 @@ test('unavailable cache metadata restores multiple files from one verified Git r
   assert.deepEqual(await cache.read(pinned,versionId,second),secondBody);
   assert.equal(reads,1);
   assert.deepEqual(await new RawImportGitCache(null,'',git as never).read(pinned,versionId,file),body);
+});
+
+test('missing large-capture files read pinned Git blobs without cloning the whole archive',async()=>{
+  const secondBody=Buffer.from('<p>English</p>');
+  const second={path:'en/index.html',mediaType:'text/html',sizeBytes:secondBody.length,
+    sha256:createHash('sha256').update(secondBody).digest('hex'),bytes:secondBody};
+  const pkg=rawImportGitPackage({scope:ref.scope,runtimeSiteId:'site_123',siteVersionId:versionId,files:[file,second]});
+  const pinned={...ref,manifestSha256:pkg.manifestSha256};
+  const treeSha='d'.repeat(40);
+  const blobs=new Map(pkg.gitFiles.map(entry=>[
+    createHash('sha1').update(`blob ${entry.body.length}\0`).update(entry.body).digest('hex'),Buffer.from(entry.body),
+  ]));
+  const tree=pkg.gitFiles.map(entry=>({path:entry.path,type:'blob',size:entry.body.length,
+    sha:createHash('sha1').update(`blob ${entry.body.length}\0`).update(entry.body).digest('hex')}));
+  const requests:string[]=[];
+  const transport=async(url:string)=>{
+    const path=new URL(url).pathname;requests.push(path);
+    let value:unknown;
+    if(path.endsWith(`/git/ref/heads/imports/${versionId}`))value={object:{sha:pinned.commit}};
+    else if(path.endsWith(`/git/commits/${pinned.commit}`))value={sha:pinned.commit,parents:[{sha:'c'.repeat(40)}],tree:{sha:treeSha}};
+    else if(path.endsWith(`/git/trees/${treeSha}`))value={truncated:false,tree};
+    else if(path.includes('/git/blobs/')){
+      const oid=path.split('/').at(-1)!;const body=blobs.get(oid)!;
+      value={sha:oid,encoding:'base64',size:body.length,content:body.toString('base64')};
+    }else throw Error('unexpected Git request');
+    return new Response(JSON.stringify(value),{status:200});
+  };
+  const git={resolveTarget:async()=>({owner:'owner',ownerId:1,repository:'site',repositoryId:2,token:'local'}),
+    verifyTarget:async()=>{},read:async()=>{throw Error('full archive must not be cloned');},
+    transport:transport as typeof fetch};
+  const cache=new RawImportGitCache(null,'',git as never);
+  assert.deepEqual(await cache.read(pinned,versionId,file),body);
+  assert.deepEqual(await cache.read(pinned,versionId,second),secondBody);
+  assert.equal(requests.filter(path=>path.includes('/git/trees/')).length,1);
+  assert.equal(requests.filter(path=>path.includes('/git/commits/')).length,1);
+  const fileOid=tree.find(entry=>entry.path.endsWith('/index.html'))!.sha;
+  const badGit={...git,transport:(async(url:string)=>{
+    const path=new URL(url).pathname;
+    if(path.endsWith(`/git/blobs/${fileOid}`))return new Response(JSON.stringify({sha:fileOid,
+      encoding:'base64',size:8,content:Buffer.from('tampered').toString('base64')}),{status:200});
+    return transport(url);
+  }) as typeof fetch};
+  await assert.rejects(new RawImportGitCache(null,'',badGit as never).read(pinned,versionId,file),
+    /RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
 });
