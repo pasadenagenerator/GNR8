@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { packRawImportShards, ShardedRawImportReader, writeShardedRawImportArchive } from './raw-import-sharded-git';
+import { RawImportGitCache } from './raw-import-git-cache';
 
 const hash = (body: Buffer) => createHash('sha256').update(body).digest('hex');
 const blobOid = (body: Buffer) => createHash('sha1').update(`blob ${body.length}\0`).update(body).digest('hex');
@@ -67,6 +68,28 @@ test('large raw import is committed as verified Git shards and restores exact so
   assert.deepEqual(await reader.read({ sha256: files[0]!.sha256, sizeBytes: html.length }), html);
   assert.deepEqual(await reader.read({ sha256: files[1]!.sha256, sizeBytes: image.length }), image);
   assert.equal(blobs.size, 3, 'two shards and one manifest are the only Git blobs');
+  const objects = new Map<string, Buffer>();
+  const cacheClient = { storage: {
+    getBucket: async () => ({ data: { public: false }, error: null }),
+    from: () => ({
+      download: async (key: string) => ({ data: objects.has(key)
+        ? new Blob([new Uint8Array(objects.get(key)!)]) : null, error: null }),
+      upload: async (key: string, bytes: Buffer) => {
+        objects.set(key, Buffer.from(bytes)); return { data: {}, error: null };
+      },
+    }),
+  } };
+  const cacheGit = { resolveTarget: async () => ({ ...input.target, ownerId: 1, repositoryId: 2 }),
+    verifyTarget: async () => {}, read: async () => { throw Error('full archive read is forbidden'); }, transport };
+  const cache = new RawImportGitCache(cacheClient as never, 'private-assets', cacheGit as never);
+  const cacheRef = { scope, repository: 'owner/site', commit,
+    manifestPath: written.manifestPath, manifestSha256: written.manifestSha256,
+    archiveFormat: 'sharded-v1' as const };
+  assert.deepEqual(await cache.read(cacheRef, siteVersionId, files[0]!), html);
+  const cacheKey = [...objects.keys()][0]!;
+  objects.set(cacheKey, Buffer.from('corrupt'));
+  assert.deepEqual(await cache.read(cacheRef, siteVersionId, files[0]!), html);
+  assert.deepEqual(objects.get(cacheKey), html);
   blobs.set(expected.manifest.shards[0]!.oid, Buffer.from('corrupt'));
   const corrupted = new ShardedRawImportReader({ scope, repository: 'owner/site', commit,
     manifestPath: written.manifestPath, manifestSha256: written.manifestSha256 },

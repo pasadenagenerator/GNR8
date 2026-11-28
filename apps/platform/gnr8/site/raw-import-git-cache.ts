@@ -13,7 +13,8 @@ type Ref=NonNullable<RawImportedSiteArtifactMetadata['gitArchive']>;
 type Recovery={resolveTarget:typeof resolvedGitHubTarget;
   verifyTarget:(scope:Ref['scope'] & {siteVersionId:string},
     target:NonNullable<Awaited<ReturnType<typeof resolvedGitHubTarget>>>)=>Promise<void>;
-  read:typeof readStandaloneGit};
+  read:typeof readStandaloneGit;
+  transport?:typeof fetch};
 const recovery:Recovery={resolveTarget:resolvedGitHubTarget,
   verifyTarget:async(scope,target)=>new GitHubStackiStore(scope,target).verifyTarget(),read:readStandaloneGit};
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -94,7 +95,7 @@ export class RawImportGitCache{
             const target=await this.git.resolveTarget(scope);
             if(!target||`${target.owner}/${target.repository}`!==ref.repository)invalid();
             await this.git.verifyTarget(scope,target);
-            return new ShardedRawImportReader(ref,versionId,target);
+            return new ShardedRawImportReader(ref,versionId,target,this.git.transport);
           })();
           this.sharded.set(archiveKey,pending);
         }
@@ -117,31 +118,20 @@ export class RawImportGitCache{
     let result:Awaited<ReturnType<NonNullable<typeof bucket>['download']>>|null=null;
     if(bucket)try{result=await bucket.download(objectKey);}catch{/* Recover from pinned Git. */}
     if(result?.data){
-      if(result.error||result.data.size!==file.sizeBytes)invalid();
       let cached:Buffer|null=null;
-      try{cached=Buffer.from(await result.data.arrayBuffer());}catch{/* Recover from pinned Git. */}
-      if(cached){
-        if(cached.length!==file.sizeBytes||hash(cached)!==file.sha256)invalid();
+      if(!result.error&&result.data.size===file.sizeBytes)
+        try{cached=Buffer.from(await result.data.arrayBuffer());}catch{/* Recover from pinned Git. */}
+      if(cached&&cached.length===file.sizeBytes&&hash(cached)===file.sha256){
         return cached;
       }
-      result=null;
     }
-    if(!result?.data){
-      const bytes=await this.recover(ref,versionId,file);
-      if(!bucket)return bytes;
-      try{await bucket.upload(objectKey,bytes,{upsert:false,contentType:'application/octet-stream',cacheControl:'3600'});}
-      catch{/* Exact readback reconciles an ambiguous upload. */}
-      let restored:Awaited<ReturnType<typeof bucket.download>>;
-      try{restored=await bucket.download(objectKey);}catch{return bytes;}
-      // Git is the verified source of truth. A disposable cache outage must not
-      // make a pinned, integrity-checked import unreadable.
-      if(restored.error||!restored.data)return bytes;
-      if(restored.data.size!==file.sizeBytes)invalid();
-      let cached:Buffer;
-      try{cached=Buffer.from(await restored.data.arrayBuffer());}catch{return bytes;}
-      if(cached.length!==file.sizeBytes||hash(cached)!==file.sha256)invalid();
-      return cached;
-    }
-    invalid();
+    const bytes=await this.recover(ref,versionId,file);
+    if(!bucket)return bytes;
+    // Cache copies are disposable; a verified Git read remains usable even if
+    // the private cache cannot be repaired immediately.
+    try{await bucket.upload(objectKey,bytes,{upsert:!!result?.data,
+      contentType:'application/octet-stream',cacheControl:'3600'});}
+    catch{/* The verified Git bytes remain usable. */}
+    return bytes;
   }
 }

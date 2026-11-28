@@ -56,7 +56,7 @@ test("shared selector evidence preserves CSS dependency decisions across stylesh
     "#contact{background:url('./contact.webp')}#absent{background:url('./absent.webp')}",
   ]) {
     assert.deepEqual(
-      findProvablyUnusedCssDependencies({ css, stylesheetUrl: STYLESHEET_URL, htmlDocuments, selectorEvidence }),
+      findProvablyUnusedCssDependencies({ css, stylesheetUrl: STYLESHEET_URL, selectorEvidence }),
       findProvablyUnusedCssDependencies({ css, stylesheetUrl: STYLESHEET_URL, htmlDocuments }),
     );
   }

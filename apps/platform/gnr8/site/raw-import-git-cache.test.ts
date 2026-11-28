@@ -13,7 +13,7 @@ const ref={scope:{agencyId:'11111111-1111-4111-8111-111111111111',
   repository:'owner/site',commit:'a'.repeat(40),
   manifestPath:`raw-import/${versionId}/.gnr8-import-manifest.json`,manifestSha256:'b'.repeat(64)};
 
-test('private raw import cache verifies bytes; corruption and public bucket fail closed',async()=>{
+test('private raw import cache repairs corruption; public bucket fails closed',async()=>{
   const objects=new Map<string,Buffer>();let publicBucket=false;
   const client={storage:{
     getBucket:async()=>({data:{public:publicBucket},error:null}),
@@ -33,7 +33,8 @@ test('private raw import cache verifies bytes; corruption and public bucket fail
   assert.deepEqual(await verified.read(pinned,versionId,file),body);
   const key=[...objects.keys()][0];
   objects.set(key,Buffer.from('corrupt'));
-  await assert.rejects(verified.read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
+  assert.deepEqual(await verified.read(pinned,versionId,file),body);
+  assert.deepEqual(objects.get(key),body);
   publicBucket=true;
   await assert.rejects(new RawImportGitCache(client as never,'private-assets',git as never).read(pinned,versionId,file),
     /RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
@@ -60,13 +61,15 @@ test('missing raw derivative restores exact pinned Git bytes and rejects wrong s
   assert.equal(reads,1);
   const key=[...objects.keys()][0]!;
   objects.set(key,Buffer.from('corrupt'));
-  await assert.rejects(cache.read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
+  assert.deepEqual(await cache.read(pinned,versionId,file),body);
+  assert.deepEqual(objects.get(key),body);
   assert.equal(reads,1);
   objects.delete(key);repo='other';
   await assert.rejects(new RawImportGitCache(client as never,'private-assets',git as never)
     .read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
   assert.equal(reads,1);
   repo='site';files.set(`raw-import/${versionId}/${file.path}`,Buffer.from('changed'));
+  objects.set(key,Buffer.from('corrupt'));
   await assert.rejects(new RawImportGitCache(client as never,'private-assets',git as never)
     .read(pinned,versionId,file),/RAW_IMPORT_CACHE_INTEGRITY_FAILED/);
   files.set(`raw-import/${versionId}/${file.path}`,Buffer.from(body));uploadBlocked=true;
